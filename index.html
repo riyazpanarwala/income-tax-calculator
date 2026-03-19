@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>India Income Tax Calculator FY 2025-26 (AY 2026-27)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .input-section {
+            padding: 30px;
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+        }
+
+        .result-section {
+            padding: 30px;
+            background: white;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #3498db;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .input-group label {
+            display: block;
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .input-group .help-text {
+            font-size: 0.85em;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+
+        .subsection {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+
+        .subsection-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .result-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .result-card h3 {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+
+        .result-card .amount {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+
+        .breakdown-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 0.95em;
+        }
+
+        .breakdown-table th,
+        .breakdown-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .breakdown-table th {
+            background: #34495e;
+            color: white;
+            font-weight: 600;
+        }
+
+        .breakdown-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .breakdown-table .amount-col {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
+
+        .breakdown-table .positive {
+            color: #27ae60;
+        }
+
+        .breakdown-table .negative {
+            color: #e74c3c;
+        }
+
+        .slab-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+
+        .slab-table th,
+        .slab-table td {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+        }
+
+        .slab-table th {
+            background: #3498db;
+            color: white;
+        }
+
+        .slab-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .note-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+
+        .note-box strong {
+            color: #856404;
+        }
+
+        .reset-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 20px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+
+        .reset-btn:hover {
+            background: #c0392b;
+        }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        .total-row {
+            background: #2c3e50 !important;
+            color: white;
+            font-weight: bold;
+        }
+
+        .total-row td {
+            border-bottom: none !important;
+        }
+
+        .loss-carry-forward {
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .loss-carry-forward h4 {
+            color: #2e7d32;
+            margin-bottom: 10px;
+        }
+
+        .age-selector {
+            margin-bottom: 20px;
+        }
+
+        .age-selector select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🇮🇳 Income Tax Calculator</h1>
+            <p>FY 2025-26 (AY 2026-27) | New Tax Regime</p>
+        </div>
+
+        <div class="main-content">
+            <div class="input-section">
+                <div class="section-title">
+                    <span class="icon">📝</span>
+                    Income Details
+                </div>
+
+                <div class="age-selector">
+                    <label>Age Category</label>
+                    <select id="ageCategory" onchange="calculateTax()">
+                        <option value="below60" selected>Below 60 years</option>
+                        <option value="60to80">60 to 80 years (Senior Citizen)</option>
+                        <option value="above80">Above 80 years (Super Senior)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Gross Salary Income (Annual)</label>
+                    <input type="number" id="grossSalary" placeholder="Enter gross salary" value="2214012" oninput="calculateTax()">
+                    <div class="help-text">Include all allowances, bonuses, arrears</div>
+                </div>
+
+                <div class="input-group">
+                    <label>Standard Deduction</label>
+                    <input type="number" id="stdDeduction" value="75000" readonly style="background: #ecf0f1;">
+                    <div class="help-text">Fixed at ₹75,000 for FY 2025-26 (New Regime)</div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">F&O Trading (Speculative Business)</div>
+                    <div class="input-group">
+                        <label>F&O Profits</label>
+                        <input type="number" id="fnoProfit" placeholder="Enter F&O profits" value="3386.16" oninput="calculateTax()">
+                    </div>
+                    <div class="input-group">
+                        <label>F&O Losses</label>
+                        <input type="number" id="fnoLoss" placeholder="Enter F&O losses" value="1374.98" oninput="calculateTax()">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Dividend Income</label>
+                    <input type="number" id="dividendIncome" placeholder="Enter dividend income" value="13232.95" oninput="calculateTax()">
+                    <div class="help-text">Taxable in hands of recipient</div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Capital Gains (Equity)</div>
+                    <div class="input-group">
+                        <label>Short Term Capital Gains (STCG)</label>
+                        <input type="number" id="stcg" placeholder="Enter STCG" value="0" oninput="calculateTax()">
+                    </div>
+                    <div class="input-group">
+                        <label>Short Term Capital Losses (STCL)</label>
+                        <input type="number" id="stcl" placeholder="Enter STCL" value="10391.15" oninput="calculateTax()">
+                    </div>
+                    <div class="input-group">
+                        <label>Long Term Capital Gains (LTCG)</label>
+                        <input type="number" id="ltcg" placeholder="Enter LTCG" value="0" oninput="calculateTax()">
+                    </div>
+                    <div class="input-group">
+                        <label>Long Term Capital Losses (LTCL)</label>
+                        <input type="number" id="ltcl" placeholder="Enter LTCL" value="0" oninput="calculateTax()">
+                    </div>
+                </div>
+
+                <button class="reset-btn" onclick="resetForm()">🔄 Reset Form</button>
+            </div>
+
+            <div class="result-section">
+                <div class="section-title">
+                    <span class="icon">📊</span>
+                    Tax Calculation Results
+                </div>
+
+                <div class="result-card">
+                    <h3>Total Tax Payable</h3>
+                    <div class="amount" id="totalTax">₹0</div>
+                </div>
+
+                <table class="breakdown-table">
+                    <thead>
+                        <tr>
+                            <th>Income Head</th>
+                            <th class="amount-col">Amount (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="incomeBreakdown">
+                        <!-- Dynamic content -->
+                    </tbody>
+                </table>
+
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="icon">📈</span>
+                    Tax Slab Breakdown
+                </div>
+
+                <table class="slab-table" id="slabTable">
+                    <thead>
+                        <tr>
+                            <th>Income Slab</th>
+                            <th>Rate</th>
+                            <th>Tax Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="slabBreakdown">
+                        <!-- Dynamic content -->
+                    </tbody>
+                </table>
+
+                <div class="loss-carry-forward" id="lossSection" style="display: none;">
+                    <h4>📋 Losses Carried Forward</h4>
+                    <div id="lossDetails"></div>
+                </div>
+
+                <div class="note-box">
+                    <strong>Note:</strong> This calculator follows the New Tax Regime (Section 115BAC) for FY 2025-26. STCL can only be set off against STCG/LTCG, not against salary or business income. F&O losses can be set off against F&O profits.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function formatCurrency(amount) {
+            return '₹' + amount.toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function calculateTax() {
+            // Get input values
+            const grossSalary = parseFloat(document.getElementById('grossSalary').value) || 0;
+            const stdDeduction = parseFloat(document.getElementById('stdDeduction').value) || 0;
+            const fnoProfit = parseFloat(document.getElementById('fnoProfit').value) || 0;
+            const fnoLoss = parseFloat(document.getElementById('fnoLoss').value) || 0;
+            const dividendIncome = parseFloat(document.getElementById('dividendIncome').value) || 0;
+            const stcg = parseFloat(document.getElementById('stcg').value) || 0;
+            const stcl = parseFloat(document.getElementById('stcl').value) || 0;
+            const ltcg = parseFloat(document.getElementById('ltcg').value) || 0;
+            const ltcl = parseFloat(document.getElementById('ltcl').value) || 0;
+            const ageCategory = document.getElementById('ageCategory').value;
+
+            // Calculate Net F&O Income (Loss set off against profit)
+            const netFNOIncome = Math.max(0, fnoProfit - fnoLoss);
+            const fnoLossCarriedForward = Math.max(0, fnoLoss - fnoProfit);
+
+            // Calculate Net Salary
+            const netSalary = Math.max(0, grossSalary - stdDeduction);
+
+            // Calculate Capital Gains (Loss can only set off against gains in same head)
+            // STCL can set off against STCG first, then remaining against LTCG
+            let netSTCG = 0;
+            let stclRemaining = stcl;
+            
+            // Set off STCL against STCG
+            if (stcg > 0) {
+                const setOffAmount = Math.min(stcg, stcl);
+                netSTCG = stcg - setOffAmount;
+                stclRemaining -= setOffAmount;
+            } else {
+                netSTCG = stcg;
+            }
+
+            // Remaining STCL can set off against LTCG
+            let netLTCG = ltcg;
+            if (stclRemaining > 0 && ltcg > 0) {
+                const setOffAmount = Math.min(ltcg, stclRemaining);
+                netLTCG = ltcg - setOffAmount;
+                stclRemaining -= setOffAmount;
+            }
+
+            // LTCL can only set off against LTCG
+            let netLTCGFinal = Math.max(0, netLTCG - ltcl);
+            let ltclRemaining = Math.max(0, ltcl - netLTCG);
+
+            // Total Income for slab rates (excluding capital gains which have special rates in old regime, but in new regime all are slab rates)
+            // In New Regime, capital gains are also taxed at slab rates
+            const totalIncomeForSlabs = netSalary + netFNOIncome + dividendIncome + netSTCG + netLTCGFinal;
+
+            // Calculate Tax
+            let tax = 0;
+            const slabs = [
+                { limit: 400000, rate: 0 },
+                { limit: 800000, rate: 5 },
+                { limit: 1200000, rate: 10 },
+                { limit: 1600000, rate: 15 },
+                { limit: 2000000, rate: 20 },
+                { limit: Infinity, rate: 25 }
+            ];
+
+            let remainingIncome = totalIncomeForSlabs;
+            let prevLimit = 0;
+            const slabBreakdown = [];
+
+            for (let slab of slabs) {
+                if (remainingIncome > 0) {
+                    const taxableInSlab = Math.min(remainingIncome, slab.limit - prevLimit);
+                    const taxInSlab = taxableInSlab * slab.rate / 100;
+                    tax += taxInSlab;
+                    
+                    if (taxableInSlab > 0) {
+                        slabBreakdown.push({
+                            slab: prevLimit === 0 && slab.limit === 400000 ? 
+                                'Up to ₹4,00,000' : 
+                                `₹${(prevLimit + 1).toLocaleString()} - ₹${slab.limit === Infinity ? 'Above' : slab.limit.toLocaleString()}`,
+                            rate: slab.rate,
+                            amount: taxInSlab,
+                            taxableAmount: taxableInSlab
+                        });
+                    }
+                    
+                    remainingIncome -= taxableInSlab;
+                    prevLimit = slab.limit;
+                }
+            }
+
+            // Section 87A Rebate
+            let rebate = 0;
+            if (totalIncomeForSlabs <= 1200000) {
+                rebate = Math.min(tax, 60000);
+            }
+
+            const taxAfterRebate = tax - rebate;
+            const cess = taxAfterRebate * 0.04;
+            const totalTax = taxAfterRebate + cess;
+
+            // Update UI
+            document.getElementById('totalTax').textContent = formatCurrency(totalTax);
+
+            // Update Income Breakdown
+            const incomeBreakdownHTML = `
+                <tr>
+                    <td>Gross Salary</td>
+                    <td class="amount-col">${formatCurrency(grossSalary)}</td>
+                </tr>
+                <tr>
+                    <td>Less: Standard Deduction</td>
+                    <td class="amount-col negative">(${formatCurrency(stdDeduction)})</td>
+                </tr>
+                <tr style="background: #ecf0f1;">
+                    <td><strong>Net Salary Income</strong></td>
+                    <td class="amount-col"><strong>${formatCurrency(netSalary)}</strong></td>
+                </tr>
+                <tr>
+                    <td>F&O Business Income (Net)</td>
+                    <td class="amount-col">${formatCurrency(netFNOIncome)}</td>
+                </tr>
+                ${fnoLoss > 0 ? `
+                <tr>
+                    <td style="padding-left: 20px; font-size: 0.9em; color: #7f8c8d;">
+                        (F&O Profit: ${formatCurrency(fnoProfit)} - Loss: ${formatCurrency(fnoLoss)})
+                    </td>
+                    <td></td>
+                </tr>
+                ` : ''}
+                <tr>
+                    <td>Dividend Income</td>
+                    <td class="amount-col">${formatCurrency(dividendIncome)}</td>
+                </tr>
+                ${netSTCG > 0 ? `
+                <tr>
+                    <td>Short Term Capital Gains</td>
+                    <td class="amount-col positive">${formatCurrency(netSTCG)}</td>
+                </tr>
+                ` : ''}
+                ${netLTCGFinal > 0 ? `
+                <tr>
+                    <td>Long Term Capital Gains</td>
+                    <td class="amount-col positive">${formatCurrency(netLTCGFinal)}</td>
+                </tr>
+                ` : ''}
+                <tr class="total-row">
+                    <td>TOTAL TAXABLE INCOME</td>
+                    <td class="amount-col">${formatCurrency(totalIncomeForSlabs)}</td>
+                </tr>
+                ${rebate > 0 ? `
+                <tr>
+                    <td>Less: Section 87A Rebate</td>
+                    <td class="amount-col negative">(${formatCurrency(rebate)})</td>
+                </tr>
+                ` : ''}
+                <tr>
+                    <td>Tax After Rebate</td>
+                    <td class="amount-col">${formatCurrency(taxAfterRebate)}</td>
+                </tr>
+                <tr>
+                    <td>Add: Health & Education Cess @ 4%</td>
+                    <td class="amount-col">${formatCurrency(cess)}</td>
+                </tr>
+            `;
+            document.getElementById('incomeBreakdown').innerHTML = incomeBreakdownHTML;
+
+            // Update Slab Breakdown
+            const slabHTML = slabBreakdown.map(s => `
+                <tr>
+                    <td>${s.slab}</td>
+                    <td>${s.rate}%</td>
+                    <td>${formatCurrency(s.amount)}</td>
+                </tr>
+            `).join('');
+            document.getElementById('slabBreakdown').innerHTML = slabHTML;
+
+            // Update Loss Carry Forward Section
+            const hasLosses = stclRemaining > 0 || fnoLossCarriedForward > 0 || ltclRemaining > 0;
+            if (hasLosses) {
+                document.getElementById('lossSection').style.display = 'block';
+                let lossHTML = '<ul style="list-style: none; padding: 0;">';
+                
+                if (stclRemaining > 0) {
+                    lossHTML += `
+                        <li style="margin-bottom: 8px; padding: 8px; background: white; border-radius: 5px;">
+                            <strong>STCL (Equity):</strong> ${formatCurrency(stclRemaining)} 
+                            <span style="color: #666; font-size: 0.9em;">(Carry forward 8 years)</span>
+                        </li>
+                    `;
+                }
+                if (fnoLossCarriedForward > 0) {
+                    lossHTML += `
+                        <li style="margin-bottom: 8px; padding: 8px; background: white; border-radius: 5px;">
+                            <strong>F&O Loss:</strong> ${formatCurrency(fnoLossCarriedForward)} 
+                            <span style="color: #666; font-size: 0.9em;">(Carry forward 4 years, set off only against F&O income)</span>
+                        </li>
+                    `;
+                }
+                if (ltclRemaining > 0) {
+                    lossHTML += `
+                        <li style="margin-bottom: 8px; padding: 8px; background: white; border-radius: 5px;">
+                            <strong>LTCL:</strong> ${formatCurrency(ltclRemaining)} 
+                            <span style="color: #666; font-size: 0.9em;">(Carry forward 8 years, set off only against LTCG)</span>
+                        </li>
+                    `;
+                }
+                lossHTML += '</ul>';
+                document.getElementById('lossDetails').innerHTML = lossHTML;
+            } else {
+                document.getElementById('lossSection').style.display = 'none';
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('grossSalary').value = '';
+            document.getElementById('fnoProfit').value = '';
+            document.getElementById('fnoLoss').value = '';
+            document.getElementById('dividendIncome').value = '';
+            document.getElementById('stcg').value = '';
+            document.getElementById('stcl').value = '';
+            document.getElementById('ltcg').value = '';
+            document.getElementById('ltcl').value = '';
+            document.getElementById('ageCategory').value = 'below60';
+            calculateTax();
+        }
+
+        // Initial calculation
+        calculateTax();
+    </script>
+</body>
+</html>
