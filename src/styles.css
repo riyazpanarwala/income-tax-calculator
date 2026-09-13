@@ -1429,3 +1429,164 @@ tbody tr.muted {
   font-size: 10px;
   color: #728468;
 }
+
+/* Salary Periods & Appraisal Helper */
+.salary-helper-toggle-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.salary-helper-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f6ec;
+  border: 1px solid #d2ded0;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 650;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.salary-helper-btn:hover {
+  background: #e4eee0;
+  border-color: #b7cab4;
+}
+.salary-helper-card {
+  background: #fbfdfa;
+  border: 1px solid #d8e2d4;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+.salary-helper-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.salary-helper-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #274332;
+}
+.months-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 5px;
+}
+.months-meter.complete {
+  background: #e8f4e5;
+  color: #2e602e;
+}
+.months-meter.incomplete {
+  background: #fef7e7;
+  color: #8c631e;
+}
+.months-meter.overflow {
+  background: #fdeeee;
+  color: #9c2e2e;
+}
+.period-card {
+  border: 1px solid #e2e8de;
+  border-radius: 6px;
+  background: #fff;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.period-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.period-name-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.period-badge {
+  background: #edf3e7;
+  color: #4a6345;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.period-inputs-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 768px) {
+  .period-inputs-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 480px) {
+  .period-inputs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.helper-summary-bar {
+  background: #f3f7ee;
+  border: 1px solid #dbe5d5;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.helper-summary-values {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: #4f614b;
+  flex-wrap: wrap;
+}
+.helper-summary-values strong {
+  color: #1a3c2a;
+}
+.apply-btn {
+  background: var(--green);
+  color: #f1f5df;
+  border: none;
+  border-radius: 5px;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.apply-btn:hover {
+  background: #235a46;
+}
+.apply-success-toast {
+  background: #eaf4e6;
+  border: 1px solid #c9dfc3;
+  color: #2b5c2a;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

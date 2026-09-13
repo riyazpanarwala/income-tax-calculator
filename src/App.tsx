@@ -16,6 +16,34 @@ export interface BrokerItem {
   details?: string;
 }
 
+export interface SalaryPeriod {
+  id: string;
+  label: string;
+  months: number;
+  basicMonthly: number;
+  daMonthly: number;
+  allowancesMonthly: number;
+}
+
+const defaultSalaryPeriods: SalaryPeriod[] = [
+  {
+    id: '1',
+    label: 'Pre-Appraisal (Initial Months)',
+    months: 4,
+    basicMonthly: 80000,
+    daMonthly: 0,
+    allowancesMonthly: 20000,
+  },
+  {
+    id: '2',
+    label: 'Post-Appraisal (Hike Months)',
+    months: 8,
+    basicMonthly: 100000,
+    daMonthly: 0,
+    allowancesMonthly: 25000,
+  },
+];
+
 const defaultBrokers: BrokerItem[] = [
   { id: '1', broker: 'Religare Broking', stcg111A: 0, ltcg112A: 0 },
   { id: '2', broker: 'Shoonya (Finvasia)', stcg111A: 0, ltcg112A: 0 },
@@ -131,6 +159,14 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Salary Periods & Appraisal Helper State
+  const [showSalaryHelper, setShowSalaryHelper] = useState(false);
+  const [salaryPeriods, setSalaryPeriods] = useState<SalaryPeriod[]>(defaultSalaryPeriods);
+  const [helperBonus, setHelperBonus] = useState(0);
+  const [helperCommission, setHelperCommission] = useState(0);
+  const [helperPerquisites, setHelperPerquisites] = useState(0);
+  const [salaryHelperApplied, setSalaryHelperApplied] = useState(false);
+
   const update = (fn: (x: TaxInput) => void) => {
     setInput((prev) => {
       const next = structuredClone(prev);
@@ -236,7 +272,46 @@ export default function App() {
       })),
     );
     setUploadNotice(null);
+    setSalaryPeriods(defaultSalaryPeriods);
+    setHelperBonus(0);
+    setHelperCommission(0);
+    setHelperPerquisites(0);
   };
+
+  const totalSalaryMonths = salaryPeriods.reduce((acc, p) => acc + (p.months || 0), 0);
+  const helperComputedBasic = salaryPeriods.reduce(
+    (acc, p) => acc + (p.months || 0) * (p.basicMonthly || 0),
+    0,
+  );
+  const helperComputedDa = salaryPeriods.reduce(
+    (acc, p) => acc + (p.months || 0) * (p.daMonthly || 0),
+    0,
+  );
+  const helperComputedAllowances = salaryPeriods.reduce(
+    (acc, p) => acc + (p.months || 0) * (p.allowancesMonthly || 0),
+    0,
+  );
+  const helperComputedTotalGross =
+    helperComputedBasic +
+    helperComputedDa +
+    helperComputedAllowances +
+    (helperBonus || 0) +
+    (helperCommission || 0) +
+    (helperPerquisites || 0);
+
+  const applySalaryHelper = () => {
+    update((x) => {
+      x.salary.basic = helperComputedBasic;
+      x.salary.da = helperComputedDa;
+      x.salary.allowances = helperComputedAllowances;
+      x.salary.bonus = helperBonus;
+      x.salary.commission = helperCommission;
+      x.salary.perquisites = helperPerquisites;
+    });
+    setSalaryHelperApplied(true);
+    setTimeout(() => setSalaryHelperApplied(false), 4000);
+  };
+
   const rules = taxYears[input.year];
   const calculation = calculateFinalTax(input);
   const result = calculation.ok ? calculation.result : null;
@@ -523,6 +598,262 @@ export default function App() {
                       caption="Salary components, employer contributions and standard deduction"
                       open
                     >
+                      <div className="salary-helper-toggle-wrap">
+                        <button
+                          type="button"
+                          className="salary-helper-btn"
+                          onClick={() => setShowSalaryHelper((prev) => !prev)}
+                        >
+                          ⚡{' '}
+                          {showSalaryHelper
+                            ? 'Hide Salary Periods & Appraisal Helper'
+                            : 'Calculate from Monthly / Appraisal Periods'}
+                        </button>
+                        {salaryHelperApplied && (
+                          <span className="apply-success-toast">
+                            ✓ Applied to annual salary inputs below!
+                          </span>
+                        )}
+                      </div>
+
+                      {showSalaryHelper && (
+                        <div className="salary-helper-card">
+                          <div className="salary-helper-header">
+                            <div>
+                              <h4>Salary Periods, Appraisal &amp; Gap Helper</h4>
+                              <small style={{ color: 'var(--muted)' }}>
+                                Break your year into periods (e.g. pre-appraisal, post-appraisal,
+                                career break / zero-salary month)
+                              </small>
+                            </div>
+                            <div
+                              className={`months-meter ${
+                                totalSalaryMonths === 12
+                                  ? 'complete'
+                                  : totalSalaryMonths < 12
+                                    ? 'incomplete'
+                                    : 'overflow'
+                              }`}
+                            >
+                              <span>📅 Total: {totalSalaryMonths} / 12 Months</span>
+                              {totalSalaryMonths === 12 && <span>✓</span>}
+                              {totalSalaryMonths < 12 && (
+                                <span>({12 - totalSalaryMonths} mo. gap/unaccounted)</span>
+                              )}
+                              {totalSalaryMonths > 12 && <span>(exceeds 12 mo.)</span>}
+                            </div>
+                          </div>
+
+                          {salaryPeriods.map((period, idx) => (
+                            <div className="period-card" key={period.id}>
+                              <div className="period-card-header">
+                                <div className="period-name-group">
+                                  <span className="period-badge">Period {idx + 1}</span>
+                                  <input
+                                    type="text"
+                                    value={period.label}
+                                    placeholder="e.g. Pre-appraisal, Hike months, Job break"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setSalaryPeriods((prev) =>
+                                        prev.map((p) =>
+                                          p.id === period.id ? { ...p, label: val } : p,
+                                        ),
+                                      );
+                                    }}
+                                    style={{
+                                      fontWeight: 600,
+                                      fontSize: '12px',
+                                      padding: '4px 8px',
+                                      borderRadius: '5px',
+                                      border: '1px solid #dce2d6',
+                                      minWidth: '220px',
+                                    }}
+                                  />
+                                </div>
+                                {salaryPeriods.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    onClick={() => {
+                                      setSalaryPeriods((prev) =>
+                                        prev.filter((p) => p.id !== period.id),
+                                      );
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="period-inputs-grid">
+                                <label className="field">
+                                  <span>Duration (months)</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="12"
+                                    value={period.months}
+                                    onChange={(e) => {
+                                      const m = Math.max(
+                                        1,
+                                        Math.min(12, parseInt(e.target.value) || 1),
+                                      );
+                                      setSalaryPeriods((prev) =>
+                                        prev.map((p) =>
+                                          p.id === period.id ? { ...p, months: m } : p,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                                <Amount
+                                  label="Monthly Basic / Pension"
+                                  value={period.basicMonthly}
+                                  onChange={(v) => {
+                                    setSalaryPeriods((prev) =>
+                                      prev.map((p) =>
+                                        p.id === period.id ? { ...p, basicMonthly: v } : p,
+                                      ),
+                                    );
+                                  }}
+                                />
+                                <Amount
+                                  label="Monthly Dearness Allowance (DA)"
+                                  value={period.daMonthly}
+                                  onChange={(v) => {
+                                    setSalaryPeriods((prev) =>
+                                      prev.map((p) =>
+                                        p.id === period.id ? { ...p, daMonthly: v } : p,
+                                      ),
+                                    );
+                                  }}
+                                />
+                                <Amount
+                                  label="Monthly Taxable Allowances"
+                                  value={period.allowancesMonthly}
+                                  onChange={(v) => {
+                                    setSalaryPeriods((prev) =>
+                                      prev.map((p) =>
+                                        p.id === period.id ? { ...p, allowancesMonthly: v } : p,
+                                      ),
+                                    );
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '10px',
+                              marginTop: '10px',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => {
+                                const remaining = Math.max(1, 12 - totalSalaryMonths);
+                                setSalaryPeriods((prev) => [
+                                  ...prev,
+                                  {
+                                    id: String(Date.now()),
+                                    label: `Period ${prev.length + 1} (Post-Appraisal / New Job)`,
+                                    months: remaining,
+                                    basicMonthly: 100000,
+                                    daMonthly: 0,
+                                    allowancesMonthly: 25000,
+                                  },
+                                ]);
+                              }}
+                            >
+                              + Add Another Period (e.g. Hike or Switch)
+                            </button>
+
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => {
+                                const remaining = Math.max(1, 12 - totalSalaryMonths);
+                                setSalaryPeriods((prev) => [
+                                  ...prev,
+                                  {
+                                    id: String(Date.now()),
+                                    label: 'Career Break / Unemployed Gap',
+                                    months: remaining,
+                                    basicMonthly: 0,
+                                    daMonthly: 0,
+                                    allowancesMonthly: 0,
+                                  },
+                                ]);
+                              }}
+                            >
+                              + Add Unemployed / Gap Month (₹0)
+                            </button>
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: '14px',
+                              paddingTop: '12px',
+                              borderTop: '1px solid #e1e7dc',
+                            }}
+                          >
+                            <h4 style={{ margin: '0 0 10px', fontSize: '12px', color: '#384d3b' }}>
+                              One-off Annual Components (Bonus, Commission, Perquisites)
+                            </h4>
+                            <div className="fields">
+                              <Amount
+                                label="One-off Bonus / Variable Pay (Annual total)"
+                                value={helperBonus}
+                                onChange={setHelperBonus}
+                              />
+                              <Amount
+                                label="Commission / Incentives (Annual total)"
+                                value={helperCommission}
+                                onChange={setHelperCommission}
+                              />
+                              <Amount
+                                label="Taxable Perquisites (Annual total)"
+                                value={helperPerquisites}
+                                onChange={setHelperPerquisites}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="helper-summary-bar">
+                            <div className="helper-summary-values">
+                              <span>
+                                Annual Basic: <strong>{money(helperComputedBasic)}</strong>
+                              </span>
+                              {helperComputedDa > 0 && (
+                                <span>
+                                  Annual DA: <strong>{money(helperComputedDa)}</strong>
+                                </span>
+                              )}
+                              <span>
+                                Annual Allowances:{' '}
+                                <strong>{money(helperComputedAllowances)}</strong>
+                              </span>
+                              {helperBonus > 0 && (
+                                <span>
+                                  Bonus: <strong>{money(helperBonus)}</strong>
+                                </span>
+                              )}
+                              <span>
+                                Gross Computed: <strong>{money(helperComputedTotalGross)}</strong>
+                              </span>
+                            </div>
+                            <button type="button" className="apply-btn" onClick={applySalaryHelper}>
+                              ✓ Apply to Annual Salary Inputs
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="fields">
                         {fields('salary', {
                           basic: 'Basic salary / regular pension',
