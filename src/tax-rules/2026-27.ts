@@ -1,0 +1,57 @@
+import type { TaxRules } from './types';
+export const rules2026: TaxRules = {
+  year: '2026-27',
+  start: '2026-04-01',
+  end: '2027-03-31',
+  verifiedOn: '2026-09-13',
+  slabs: [
+    { upper: 400000, rate: 0 },
+    { upper: 800000, rate: 0.05 },
+    { upper: 1200000, rate: 0.1 },
+    { upper: 1600000, rate: 0.15 },
+    { upper: 2000000, rate: 0.2 },
+    { upper: 2400000, rate: 0.25 },
+    { upper: null, rate: 0.3 },
+  ],
+  salaryDeduction: 75000,
+  familyPension: { divisor: 3, maximum: 25000 },
+  houseDeductionRate: 0.3,
+  basicExemption: 400000,
+  employerContributionReviewLimit: 750000,
+  equityGrandfatheringBefore: '2018-02-01',
+  propertyProtectionBefore: '2024-07-23',
+  rebate: { threshold: 1200000, maximum: 60000 },
+  special: {
+    '111A': { rate: 0.2, exemption: 0, section: '196' },
+    '112A': { rate: 0.125, exemption: 125000, section: '198' },
+    '112': { rate: 0.125, exemption: 0, section: '197' },
+  },
+  surcharge: [
+    { threshold: 5000000, rate: 0.1 },
+    { threshold: 10000000, rate: 0.15 },
+    { threshold: 20000000, rate: 0.25 },
+  ],
+  specialSurchargeCap: 0.15,
+  cessRate: 0.04,
+  roundingUnit: 10,
+  deductions: {
+    employerNps: {
+      section: '124(1)–(2) / former 80CCD(2)',
+      name: 'Employer NPS contribution',
+      maximumLimit: '14% of basic salary + eligible DA',
+      eligibility:
+        'Employer contribution included in salary; DA must form part of retirement benefits.',
+      regime: 'new',
+      effectiveYear: '2026-27',
+      rate: 0.14,
+    },
+    agniveerGovernment: {
+      section: '125(2) / former 80CCH(2)',
+      name: 'Central Government Agniveer contribution',
+      maximumLimit: 'Actual eligible Central Government contribution',
+      eligibility: 'Enrolled in Agnipath; contribution included in salary.',
+      regime: 'new',
+      effectiveYear: '2026-27',
+    },
+  },
+};
