@@ -1254,3 +1254,178 @@ tbody tr.muted {
     display: none;
   }
 }
+
+/* Multi-broker Capital Gains Styles */
+.mode-toggle {
+  display: inline-flex;
+  background: #edf1e7;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+  margin-bottom: 18px;
+}
+.mode-toggle button {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #55664a;
+  transition: all 0.15s ease;
+}
+.mode-toggle button.active {
+  background: #fff;
+  color: var(--green);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.broker-dropzone {
+  border: 2px dashed #cfdac6;
+  border-radius: 8px;
+  padding: 20px 16px;
+  background: #fbfdf9;
+  text-align: center;
+  margin: 14px 0 18px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+}
+.broker-dropzone:hover,
+.broker-dropzone.drag-over {
+  border-color: var(--green);
+  background: #f3f7ee;
+}
+.dropzone-icon {
+  font-size: 24px;
+  color: #527552;
+  margin-bottom: 6px;
+}
+.dropzone-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: #314435;
+  margin-bottom: 4px;
+}
+.dropzone-hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.dropzone-hint strong {
+  color: #4a6147;
+}
+.broker-card {
+  border: 1px solid #e1e7dc;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+.broker-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.broker-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.broker-badge {
+  background: #e9f0e1;
+  color: #415e3b;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+.broker-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.file-upload-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4e6a4b;
+  background: #f4f7ef;
+  border: 1px solid #dbe3d3;
+  padding: 4px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.file-upload-label:hover {
+  background: #e8efe0;
+  color: var(--green);
+}
+.extracted-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #eef7e9;
+  border: 1px solid #d5e8ca;
+  color: #3b6035;
+  font-size: 10px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  margin-bottom: 12px;
+}
+.extracted-info span:first-child {
+  font-weight: 700;
+}
+.portfolio-summary-card {
+  background: linear-gradient(135deg, #f3f7ee 0%, #eaf1e3 100%);
+  border: 1px solid #d7e2ce;
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin: 18px 0 14px;
+}
+.portfolio-summary-card h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #274332;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.portfolio-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 650px) {
+  .portfolio-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.portfolio-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.portfolio-stat span {
+  font-size: 10px;
+  color: #5c6c54;
+  font-weight: 500;
+}
+.portfolio-stat strong {
+  font-size: 16px;
+  color: #1a3c2a;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+}
+.portfolio-stat small {
+  font-size: 10px;
+  color: #728468;
+}

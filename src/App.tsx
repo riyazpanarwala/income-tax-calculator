@@ -1,9 +1,26 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import { emptyInput, type TaxInput, type Gain } from './tax-engine/types';
 import { calculateFinalTax } from './tax-engine/calculateFinalTax';
 import { taxYears } from './tax-rules';
 import Breakdown, { LedgerRow } from './Breakdown';
 import { money, whole, percent, inputNumber, parseAmount } from './format';
+import { parseBrokerFile, KNOWN_BROKERS } from './brokerParser';
+
+export interface BrokerItem {
+  id: string;
+  broker: string;
+  customName?: string;
+  stcg111A: number;
+  ltcg112A: number;
+  fileName?: string;
+  details?: string;
+}
+
+const defaultBrokers: BrokerItem[] = [
+  { id: '1', broker: 'Religare Broking', stcg111A: 0, ltcg112A: 0 },
+  { id: '2', broker: 'Shoonya (Finvasia)', stcg111A: 0, ltcg112A: 0 },
+  { id: '3', broker: 'Groww', stcg111A: 0, ltcg112A: 0 },
+];
 
 const example = () => {
   const x = emptyInput();
@@ -22,6 +39,11 @@ function Amount({
   hint?: string;
 }) {
   const [raw, setRaw] = useState(inputNumber(value));
+  const [prevVal, setPrevVal] = useState(value);
+  if (value !== prevVal) {
+    setPrevVal(value);
+    setRaw(inputNumber(value));
+  }
   return (
     <label className="field">
       <span>{label}</span>
@@ -102,6 +124,13 @@ export default function App() {
   const [sample, setSample] = useState(true);
   const [revision, setRevision] = useState(0);
   const [tab, setTab] = useState('calculator');
+  const [capitalGainsMode, setCapitalGainsMode] = useState<'broker' | 'manual'>('broker');
+  const [brokers, setBrokers] = useState<BrokerItem[]>(defaultBrokers);
+  const [parsingFile, setParsingFile] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const update = (fn: (x: TaxInput) => void) => {
     setInput((prev) => {
       const next = structuredClone(prev);
@@ -110,10 +139,103 @@ export default function App() {
     });
     setSample(false);
   };
+
+  const syncBrokers = (brokerList: BrokerItem[]) => {
+    const currentRules = taxYears[input.year] ?? taxYears['2026-27'];
+    const totalStcg = brokerList.reduce((acc, b) => acc + (b.stcg111A || 0), 0);
+    const totalLtcg = brokerList.reduce((acc, b) => acc + (b.ltcg112A || 0), 0);
+
+    update((x) => {
+      const nextGains: Gain[] = [];
+      if (totalStcg > 0) {
+        nextGains.push({
+          kind: '111A',
+          asset: 'equity',
+          amount: totalStcg,
+          acquired: currentRules.start,
+          sold: `${currentRules.start.slice(0, 4)}-09-15`,
+          confirmed: true,
+        });
+      }
+      if (totalLtcg > 0) {
+        nextGains.push({
+          kind: '112A',
+          asset: 'equity',
+          amount: totalLtcg,
+          acquired: '2024-04-01',
+          sold: `${currentRules.start.slice(0, 4)}-05-15`,
+          confirmed: true,
+        });
+      }
+      x.gains = nextGains;
+    });
+  };
+
+  const handleFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+    setParsingFile(true);
+    setUploadNotice(null);
+    try {
+      let nextBrokers = [...brokers];
+      const messages: string[] = [];
+      for (const file of files) {
+        const parsed = await parseBrokerFile(file);
+        if (parsed.success) {
+          const existingIdx = nextBrokers.findIndex(
+            (b) =>
+              b.broker.toLowerCase() === parsed.brokerName.toLowerCase() ||
+              (b.customName && b.customName.toLowerCase() === parsed.brokerName.toLowerCase()),
+          );
+          if (existingIdx !== -1) {
+            nextBrokers[existingIdx] = {
+              ...nextBrokers[existingIdx],
+              stcg111A: parsed.stcg111A,
+              ltcg112A: parsed.ltcg112A,
+              fileName: parsed.fileName,
+              details: parsed.details,
+            };
+          } else {
+            nextBrokers.push({
+              id: String(Date.now() + Math.random()),
+              broker: parsed.brokerName,
+              stcg111A: parsed.stcg111A,
+              ltcg112A: parsed.ltcg112A,
+              fileName: parsed.fileName,
+              details: parsed.details,
+            });
+          }
+          messages.push(
+            `✓ ${parsed.brokerName}: ₹${parsed.stcg111A.toLocaleString('en-IN')} STCG, ₹${parsed.ltcg112A.toLocaleString('en-IN')} LTCG`,
+          );
+        } else {
+          messages.push(`⚠ ${file.name}: ${parsed.error || 'Could not detect numbers'}`);
+        }
+      }
+      setBrokers(nextBrokers);
+      syncBrokers(nextBrokers);
+      if (messages.length) {
+        setUploadNotice(messages.join(' | '));
+      }
+    } finally {
+      setParsingFile(false);
+    }
+  };
+
   const reset = (demo: boolean) => {
     setInput(demo ? example() : emptyInput());
     setSample(demo);
     setRevision((x) => x + 1);
+    setBrokers(
+      defaultBrokers.map((b) => ({
+        ...b,
+        stcg111A: 0,
+        ltcg112A: 0,
+        fileName: undefined,
+        details: undefined,
+      })),
+    );
+    setUploadNotice(null);
   };
   const rules = taxYears[input.year];
   const calculation = calculateFinalTax(input);
@@ -594,122 +716,417 @@ export default function App() {
                       title="Capital gains"
                       caption="Special-rate gains stay separate from your salary"
                     >
-                      <div className="info-line">
-                        <span>ⓘ</span>
-                        <span>
-                          Enter computed gains, not sale proceeds. The calculator applies the 112A
-                          exempt tax band automatically.
-                        </span>
+                      <div className="mode-toggle">
+                        <button
+                          type="button"
+                          className={capitalGainsMode === 'broker' ? 'active' : ''}
+                          onClick={() => {
+                            setCapitalGainsMode('broker');
+                            syncBrokers(brokers);
+                          }}
+                        >
+                          📊 By Broker Statement (Multi-Broker / Excel)
+                        </button>
+                        <button
+                          type="button"
+                          className={capitalGainsMode === 'manual' ? 'active' : ''}
+                          onClick={() => setCapitalGainsMode('manual')}
+                        >
+                          📝 Manual / Property / Other Assets
+                        </button>
                       </div>
-                      {input.gains.map((g, i) => (
-                        <div className="repeat-card" key={i}>
-                          <div className="repeat-header">
-                            <h3>Capital gain {i + 1}</h3>
-                            <button
-                              className="text-button"
-                              onClick={() => {
-                                update((x) => {
-                                  x.gains.splice(i, 1);
-                                });
-                                setRevision((x) => x + 1);
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                          <div className="fields">
-                            <label className="field">
-                              <span>Tax category</span>
-                              <select
-                                value={g.kind}
-                                onChange={(e) =>
-                                  update((x) => {
-                                    x.gains[i].kind = e.target.value as Gain['kind'];
-                                  })
-                                }
-                              >
-                                <option value="111A">STCG · 111A / 196</option>
-                                <option value="otherSTCG">Other STCG · normal rates</option>
-                                <option value="112A">LTCG · 112A / 198</option>
-                                <option value="112">LTCG · 112 / 197</option>
-                                <option value="otherLTCG">Other LTCG · unsupported</option>
-                              </select>
-                            </label>
-                            <label className="field">
-                              <span>Asset type</span>
-                              <select
-                                value={g.asset}
-                                onChange={(e) =>
-                                  update((x) => {
-                                    x.gains[i].asset = e.target.value as Gain['asset'];
-                                  })
-                                }
-                              >
-                                <option value="equity">Listed equity / equity-oriented fund</option>
-                                <option value="property">Land / building</option>
-                                <option value="other">Other asset</option>
-                              </select>
-                            </label>
-                            <Amount
-                              label="Computed gain after eligible exemptions"
-                              value={g.amount}
-                              onChange={(v) =>
-                                update((x) => {
-                                  x.gains[i].amount = v;
-                                })
+
+                      {capitalGainsMode === 'broker' ? (
+                        <>
+                          <div
+                            className={`broker-dropzone ${dragOver ? 'drag-over' : ''}`}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              setDragOver(true);
+                            }}
+                            onDragLeave={() => setDragOver(false)}
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              setDragOver(false);
+                              if (e.dataTransfer.files?.length) {
+                                await handleFiles(e.dataTransfer.files);
                               }
+                            }}
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              style={{ display: 'none' }}
+                              multiple
+                              accept=".xlsx,.xls,.csv"
+                              onChange={async (e) => {
+                                if (e.target.files?.length) {
+                                  await handleFiles(e.target.files);
+                                }
+                              }}
                             />
-                            {(['acquired', 'sold'] as const).map((key) => (
-                              <label className="field" key={key}>
-                                <span>{key === 'acquired' ? 'Acquisition date' : 'Sale date'}</span>
-                                <input
-                                  type="date"
-                                  value={g[key]}
-                                  onChange={(e) =>
+                            <div className="dropzone-icon">📥</div>
+                            <div className="dropzone-title">
+                              {parsingFile
+                                ? 'Analyzing statements...'
+                                : 'Upload Tax P&L Statements (Excel / CSV)'}
+                            </div>
+                            <div className="dropzone-hint">
+                              Drop your Capital Gains statements from <strong>Religare</strong>,{' '}
+                              <strong>Shoonya</strong>, <strong>Groww</strong>,{' '}
+                              <strong>Zerodha</strong>, or any broker.
+                              <br />
+                              STCG (111A) and LTCG (112A) are automatically extracted. You can drop
+                              multiple files at once.
+                            </div>
+                          </div>
+
+                          {uploadNotice && (
+                            <div className="info-line">
+                              <span>ⓘ</span>
+                              <span>{uploadNotice}</span>
+                              <button
+                                className="text-button"
+                                style={{ marginLeft: 'auto' }}
+                                onClick={() => setUploadNotice(null)}
+                              >
+                                ✕ Dismiss
+                              </button>
+                            </div>
+                          )}
+
+                          {brokers.map((item, i) => (
+                            <div className="broker-card" key={item.id}>
+                              <div className="broker-card-header">
+                                <div className="broker-title-group">
+                                  <span className="broker-badge">Broker {i + 1}</span>
+                                  <select
+                                    value={item.broker}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const updated = brokers.map((b) =>
+                                        b.id === item.id ? { ...b, broker: val } : b,
+                                      );
+                                      setBrokers(updated);
+                                    }}
+                                    style={{
+                                      fontWeight: 600,
+                                      padding: '5px 8px',
+                                      borderRadius: '5px',
+                                      border: '1px solid #dce2d6',
+                                    }}
+                                  >
+                                    <option value="Religare Broking">Religare Broking</option>
+                                    <option value="Shoonya (Finvasia)">Shoonya (Finvasia)</option>
+                                    <option value="Groww">Groww</option>
+                                    <option value="Zerodha">Zerodha</option>
+                                    <option value="Upstox">Upstox</option>
+                                    <option value="Angel One">Angel One</option>
+                                    <option value="ICICI Direct">ICICI Direct</option>
+                                    <option value="HDFC Sky / Securities">
+                                      HDFC Sky / Securities
+                                    </option>
+                                    <option value="Dhan">Dhan</option>
+                                    <option value="Kotak Securities">Kotak Securities</option>
+                                    <option value="Motilal Oswal">Motilal Oswal</option>
+                                    <option value="5paisa">5paisa</option>
+                                    <option value="Paytm Money">Paytm Money</option>
+                                    <option value="Axis Direct">Axis Direct</option>
+                                    <option value="Sharekhan">Sharekhan</option>
+                                    <option value="Other / Custom Broker">
+                                      Other / Custom Broker
+                                    </option>
+                                  </select>
+                                  {item.broker === 'Other / Custom Broker' && (
+                                    <input
+                                      type="text"
+                                      placeholder="Broker name"
+                                      value={item.customName || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        const updated = brokers.map((b) =>
+                                          b.id === item.id ? { ...b, customName: val } : b,
+                                        );
+                                        setBrokers(updated);
+                                      }}
+                                      style={{
+                                        width: '150px',
+                                        padding: '5px 8px',
+                                        borderRadius: '5px',
+                                        border: '1px solid #dce2d6',
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                                <div className="broker-actions">
+                                  <label
+                                    className="file-upload-label"
+                                    title="Upload statement for this broker"
+                                  >
+                                    📁 Upload statement
+                                    <input
+                                      type="file"
+                                      style={{ display: 'none' }}
+                                      accept=".xlsx,.xls,.csv"
+                                      onChange={async (e) => {
+                                        if (e.target.files?.[0]) {
+                                          const file = e.target.files[0];
+                                          const parsed = await parseBrokerFile(file);
+                                          const updated = brokers.map((b) =>
+                                            b.id === item.id
+                                              ? {
+                                                  ...b,
+                                                  stcg111A: parsed.stcg111A,
+                                                  ltcg112A: parsed.ltcg112A,
+                                                  fileName: file.name,
+                                                  details:
+                                                    parsed.details ||
+                                                    (parsed.success ? 'Extracted' : parsed.error),
+                                                }
+                                              : b,
+                                          );
+                                          setBrokers(updated);
+                                          syncBrokers(updated);
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                  {brokers.length > 1 && (
+                                    <button
+                                      className="text-button"
+                                      onClick={() => {
+                                        const updated = brokers.filter((b) => b.id !== item.id);
+                                        setBrokers(updated);
+                                        syncBrokers(updated);
+                                      }}
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              {item.fileName && (
+                                <div className="extracted-info">
+                                  <span>✓ Auto-extracted:</span>
+                                  <span>
+                                    {item.fileName} ({item.details || 'statement summary'})
+                                  </span>
+                                </div>
+                              )}
+                              <div className="fields">
+                                <Amount
+                                  label="Short-term capital gain (STCG 111A)"
+                                  value={item.stcg111A}
+                                  onChange={(v) => {
+                                    const updated = brokers.map((b) =>
+                                      b.id === item.id ? { ...b, stcg111A: v } : b,
+                                    );
+                                    setBrokers(updated);
+                                    syncBrokers(updated);
+                                  }}
+                                  hint="Equity held up to 1 year · Taxed at 20%"
+                                />
+                                <Amount
+                                  label="Long-term capital gain (LTCG 112A)"
+                                  value={item.ltcg112A}
+                                  onChange={(v) => {
+                                    const updated = brokers.map((b) =>
+                                      b.id === item.id ? { ...b, ltcg112A: v } : b,
+                                    );
+                                    setBrokers(updated);
+                                    syncBrokers(updated);
+                                  }}
+                                  hint="Equity held > 1 year · Eligible for ₹1.25L exemption"
+                                />
+                              </div>
+                            </div>
+                          ))}
+
+                          <button
+                            className="secondary"
+                            onClick={() => {
+                              const updated = [
+                                ...brokers,
+                                {
+                                  id: String(Date.now()),
+                                  broker: 'Other / Custom Broker',
+                                  stcg111A: 0,
+                                  ltcg112A: 0,
+                                },
+                              ];
+                              setBrokers(updated);
+                            }}
+                          >
+                            + Add another broker
+                          </button>
+
+                          <div className="portfolio-summary-card">
+                            <h4>
+                              <span>Combined Portfolio Capital Gains</span>
+                              <span className="tag">All Brokers</span>
+                            </h4>
+                            <div className="portfolio-summary-grid">
+                              <div className="portfolio-stat">
+                                <span>Total STCG (Sec 111A)</span>
+                                <strong>
+                                  {money(brokers.reduce((acc, b) => acc + (b.stcg111A || 0), 0))}
+                                </strong>
+                                <small>Taxed at {percent(rules.special['111A'].rate)}</small>
+                              </div>
+                              <div className="portfolio-stat">
+                                <span>Total LTCG (Sec 112A)</span>
+                                <strong>
+                                  {money(brokers.reduce((acc, b) => acc + (b.ltcg112A || 0), 0))}
+                                </strong>
+                                <small>Combined across all accounts</small>
+                              </div>
+                              <div className="portfolio-stat">
+                                <span>Taxable LTCG (post-exemption)</span>
+                                <strong>
+                                  {money(
+                                    Math.max(
+                                      0,
+                                      brokers.reduce((acc, b) => acc + (b.ltcg112A || 0), 0) -
+                                        rules.special['112A'].exemption,
+                                    ),
+                                  )}
+                                </strong>
+                                <small>After ₹1,25,000 statutory limit</small>
+                              </div>
+                            </div>
+                          </div>
+
+                          <p className="note">
+                            Under Indian Income Tax rules, capital gains across all brokers and
+                            demat accounts are aggregated. The statutory ₹1,25,000 exemption under
+                            Section 112A is applied to your combined LTCG total.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="info-line">
+                            <span>ⓘ</span>
+                            <span>
+                              Enter computed gains, not sale proceeds. The calculator applies the
+                              112A exempt tax band automatically.
+                            </span>
+                          </div>
+                          {input.gains.map((g, i) => (
+                            <div className="repeat-card" key={i}>
+                              <div className="repeat-header">
+                                <h3>Capital gain {i + 1}</h3>
+                                <button
+                                  className="text-button"
+                                  onClick={() => {
                                     update((x) => {
-                                      x.gains[i][key] = e.target.value;
+                                      x.gains.splice(i, 1);
+                                    });
+                                    setRevision((x) => x + 1);
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <div className="fields">
+                                <label className="field">
+                                  <span>Tax category</span>
+                                  <select
+                                    value={g.kind}
+                                    onChange={(e) =>
+                                      update((x) => {
+                                        x.gains[i].kind = e.target.value as Gain['kind'];
+                                      })
+                                    }
+                                  >
+                                    <option value="111A">STCG · 111A / 196</option>
+                                    <option value="otherSTCG">Other STCG · normal rates</option>
+                                    <option value="112A">LTCG · 112A / 198</option>
+                                    <option value="112">LTCG · 112 / 197</option>
+                                    <option value="otherLTCG">Other LTCG · unsupported</option>
+                                  </select>
+                                </label>
+                                <label className="field">
+                                  <span>Asset type</span>
+                                  <select
+                                    value={g.asset}
+                                    onChange={(e) =>
+                                      update((x) => {
+                                        x.gains[i].asset = e.target.value as Gain['asset'];
+                                      })
+                                    }
+                                  >
+                                    <option value="equity">
+                                      Listed equity / equity-oriented fund
+                                    </option>
+                                    <option value="property">Land / building</option>
+                                    <option value="other">Other asset</option>
+                                  </select>
+                                </label>
+                                <Amount
+                                  label="Computed gain after eligible exemptions"
+                                  value={g.amount}
+                                  onChange={(v) =>
+                                    update((x) => {
+                                      x.gains[i].amount = v;
                                     })
                                   }
                                 />
-                              </label>
-                            ))}
-                          </div>
-                          <Check
-                            checked={g.confirmed}
-                            onChange={(v) =>
+                                {(['acquired', 'sold'] as const).map((key) => (
+                                  <label className="field" key={key}>
+                                    <span>
+                                      {key === 'acquired' ? 'Acquisition date' : 'Sale date'}
+                                    </span>
+                                    <input
+                                      type="date"
+                                      value={g[key]}
+                                      onChange={(e) =>
+                                        update((x) => {
+                                          x.gains[i][key] = e.target.value;
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                ))}
+                              </div>
+                              <Check
+                                checked={g.confirmed}
+                                onChange={(v) =>
+                                  update((x) => {
+                                    x.gains[i].confirmed = v;
+                                  })
+                                }
+                              >
+                                I have checked the gain computation, classification, applicable
+                                exemptions and STT conditions. The amount is before the 112A annual
+                                tax band.
+                              </Check>
+                            </div>
+                          ))}
+                          <button
+                            className="secondary"
+                            onClick={() =>
                               update((x) => {
-                                x.gains[i].confirmed = v;
+                                x.gains.push({
+                                  kind: '111A',
+                                  asset: 'equity',
+                                  amount: 0,
+                                  acquired: '',
+                                  sold: '',
+                                  confirmed: false,
+                                });
                               })
                             }
                           >
-                            I have checked the gain computation, classification, applicable
-                            exemptions and STT conditions. The amount is before the 112A annual tax
-                            band.
-                          </Check>
-                        </div>
-                      ))}
-                      <button
-                        className="secondary"
-                        onClick={() =>
-                          update((x) => {
-                            x.gains.push({
-                              kind: '111A',
-                              asset: 'equity',
-                              amount: 0,
-                              acquired: '',
-                              sold: '',
-                              confirmed: false,
-                            });
-                          })
-                        }
-                      >
-                        + Add capital gain
-                      </button>
-                      <p className="note">
-                        Pre-February 2018 equity and property acquired before 23 July 2024 are
-                        blocked for grandfathering / indexation review. Mixed special-rate surcharge
-                        cases above ₹50 lakh are unsupported.
-                      </p>
+                            + Add capital gain
+                          </button>
+                          <p className="note">
+                            Pre-February 2018 equity and property acquired before 23 July 2024 are
+                            blocked for grandfathering / indexation review. Mixed special-rate
+                            surcharge cases above ₹50 lakh are unsupported.
+                          </p>
+                        </>
+                      )}
                     </Panel>
                     <Panel
                       id="payments"
