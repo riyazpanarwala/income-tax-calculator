@@ -5,6 +5,7 @@ import { taxYears } from './tax-rules';
 import Breakdown, { LedgerRow } from './Breakdown';
 import { money, whole, percent, inputNumber, parseAmount } from './format';
 import { parseBrokerFile, KNOWN_BROKERS } from './brokerParser';
+import { PortFinImport, type PortFinSession } from './integrations/PortFinImport';
 
 export interface BrokerItem {
   id: string;
@@ -149,6 +150,7 @@ const sourceAct =
   'https://www.incometaxindia.gov.in/documents/d/guest/income_tax_act_2025_as_amended_by_fa_act_2026-pdf';
 export default function App() {
   const [input, setInput] = useState<TaxInput>(example);
+  const [portfinSession, setPortfinSession] = useState<PortFinSession>({});
   const [sample, setSample] = useState(true);
   const [revision, setRevision] = useState(0);
   const [tab, setTab] = useState('calculator');
@@ -259,6 +261,7 @@ export default function App() {
   };
 
   const reset = (demo: boolean) => {
+    setPortfinSession({});
     setInput(demo ? example() : emptyInput());
     setSample(demo);
     setRevision((x) => x + 1);
@@ -313,7 +316,18 @@ export default function App() {
   };
 
   const rules = taxYears[input.year];
-  const calculation = calculateFinalTax(input);
+  const calculation = portfinSession.accepted?.reviewRequired
+    ? {
+        ok: false as const,
+        issues: [
+          {
+            path: 'PortFin import',
+            message:
+              'Unresolved classifications, losses or incomplete source records require review. Replace or discard the PortFin import in Capital gains before calculating.',
+          },
+        ],
+      }
+    : calculateFinalTax(input);
   const result = calculation.ok ? calculation.result : null;
   const fields = <K extends 'salary' | 'other' | 'payments'>(
     group: K,
@@ -1047,11 +1061,37 @@ export default function App() {
                       title="Capital gains"
                       caption="Special-rate gains stay separate from your salary"
                     >
+                      <PortFinImport
+                        input={input}
+                        session={portfinSession}
+                        setSession={setPortfinSession}
+                        onImport={(imported) => {
+                          // Import review is stored separately from user-selected scope flags.
+                          setInput({ ...imported.input, unsupported: input.unsupported });
+                          setCapitalGainsMode('manual');
+                          setSample(false);
+                          setRevision((x) => x + 1);
+                        }}
+                        onDiscard={(previous) => {
+                          update((x) => {
+                            x.gains = previous.gains;
+                          });
+                          setRevision((x) => x + 1);
+                        }}
+                      />
                       <div className="mode-toggle">
                         <button
                           type="button"
                           className={capitalGainsMode === 'broker' ? 'active' : ''}
                           onClick={() => {
+                            if (
+                              input.gains.length &&
+                              capitalGainsMode !== 'broker' &&
+                              !window.confirm(
+                                'Replace current capital gains with the broker totals?',
+                              )
+                            )
+                              return;
                             setCapitalGainsMode('broker');
                             syncBrokers(brokers);
                           }}

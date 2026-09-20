@@ -15,7 +15,20 @@ Open the local URL printed by Vite. `npm.cmd run build` type-checks and builds `
 
 Income stays in React memory and is cleared when the page is refreshed. There is no analytics, storage or outbound income submission. Google Fonts may be fetched for typography; system-font fallbacks keep the app usable without them. Print creates a local calculation breakdown.
 
-## Verification
+## Import Capital Gains from PortFin
+
+1. Select the correct FY. This calculator currently supports **FY 2026-27 only**; FY 2025-26 exports are rejected.
+2. In PortFin's Tax tab, select the same FY and choose **Export for Income Tax**. Verify instrument eligibility and review the gains/losses before downloading JSON.
+3. Open **Capital gains → Import from PortFin** and select that JSON file.
+4. Review the preview and warnings, then confirm **Import gains** or **Replace capital gains**. Merge is available for the first import only after reviewing existing broker/manual overlap.
+5. Review/edit the accepted gains and continue with salary, other income, TDS and other payments. These unrelated fields are preserved.
+6. Resolve all review items before relying on a result. Losses and ambiguous classifications withhold the estimate; no partial tax figure is presented. Discard can restore pre-import gains.
+
+Repeat imports do not append duplicate gains. Files are processed locally in browser memory. See [contract, mappings and limitations](docs/PORTFIN_INTEGRATION.md). The calculator remains an estimate; verify the final return.
+
+If your browser does not save downloads, use PortFin's **Copy JSON** (or **View JSON**) and the calculator's **Paste PortFin JSON** option. Pasted data uses the same validation and confirmation preview as files.
+
+## Verification commands
 
 ```powershell
 npm.cmd test

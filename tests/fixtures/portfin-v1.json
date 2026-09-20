@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "source": "portfin",
+  "financialYear": "2026-27",
+  "generatedAt": "2026-09-20T00:00:00.000Z",
+  "summary": {
+    "section111A": {
+      "gain": 500,
+      "loss": 0
+    },
+    "section112A": {
+      "gain": 1000,
+      "loss": 0
+    },
+    "otherSTCG": {
+      "gain": 0,
+      "loss": 0
+    },
+    "otherLTCG": {
+      "gain": 0,
+      "loss": 0
+    },
+    "review": {
+      "gain": 0,
+      "loss": 0
+    }
+  },
+  "gains": [
+    {
+      "id": "sale-1-lot-1",
+      "transaction": "sale-1",
+      "kind": "112A",
+      "asset": "equity",
+      "confirmed": true,
+      "reason": "",
+      "instrument": {
+        "symbol": "SYNTH",
+        "name": "Synthetic Equity",
+        "isin": "TEST00000001",
+        "exchange": "NSE"
+      },
+      "acquired": "2024-04-01",
+      "sold": "2026-07-01",
+      "quantity": 10,
+      "saleProceeds": 2000,
+      "costBasis": 1000,
+      "gain": 1000,
+      "holdingDays": 821,
+      "source": "fifo"
+    },
+    {
+      "id": "sale-1-lot-2",
+      "transaction": "sale-1",
+      "kind": "111A",
+      "asset": "equity",
+      "confirmed": true,
+      "reason": "",
+      "instrument": {
+        "symbol": "SYNTH",
+        "name": "Synthetic Equity",
+        "isin": "TEST00000001",
+        "exchange": "NSE"
+      },
+      "acquired": "2026-04-01",
+      "sold": "2026-07-01",
+      "quantity": 10,
+      "saleProceeds": 2000,
+      "costBasis": 1500,
+      "gain": 500,
+      "holdingDays": 91,
+      "source": "fifo"
+    }
+  ],
+  "warnings": [],
+  "reconciliation": {
+    "transactionCount": 1,
+    "gainCount": 2,
+    "reviewCount": 0,
+    "totalGain": 1500
+  }
+}
