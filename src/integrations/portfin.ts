@@ -16,6 +16,7 @@ export interface PortFinGain {
   quantity: number;
   saleProceeds: number;
   costBasis: number;
+  transferExpenditure?: number;
   gain: number;
   holdingDays: number;
   source: 'fifo';
@@ -100,7 +101,16 @@ export function importPortFinTaxData(
       Object.keys(obj)
         .filter((k) => !Object.hasOwn(fields, k))
         .forEach((k) => add(`${path}.${k}`, 'Unknown field.'));
-      Object.entries(fields).forEach(([k, t]) => shape(obj[k], t, `${path}.${k}`));
+      Object.entries(fields).forEach(([k, t]) => {
+        // Older v1 exports predate the optional, separately itemised sale expenses.
+        if (
+          k === 'transferExpenditure' &&
+          /^portfin\.gains\.\d+$/.test(path) &&
+          !Object.hasOwn(obj, k)
+        )
+          return;
+        shape(obj[k], t, `${path}.${k}`);
+      });
     } else if (
       typeof value !== typeof template ||
       (typeof value === 'number' && (!Number.isFinite(value) || Math.abs(value) > 1e12)) ||
@@ -138,6 +148,7 @@ export function importPortFinTaxData(
           quantity: 0,
           saleProceeds: 0,
           costBasis: 0,
+          transferExpenditure: 0,
           gain: 0,
           holdingDays: 0,
           source: '',
@@ -204,6 +215,7 @@ export function importPortFinTaxData(
       g.quantity <= 0 ||
       g.saleProceeds < 0 ||
       g.costBasis < 0 ||
+      (g.transferExpenditure ?? 0) < 0 ||
       !Number.isInteger(g.holdingDays) ||
       g.holdingDays < 0
     )
@@ -215,10 +227,12 @@ export function importPortFinTaxData(
     )
       add(p, 'Holding days do not reconcile with dates.');
     if (
-      [g.gain, g.saleProceeds, g.costBasis].some((n) => round(n) !== n) ||
-      Math.abs(round(g.saleProceeds - g.costBasis - g.gain)) > 0.01
+      [g.gain, g.saleProceeds, g.costBasis, g.transferExpenditure ?? 0].some(
+        (n) => round(n) !== n,
+      ) ||
+      Math.abs(round(g.saleProceeds - g.costBasis - (g.transferExpenditure ?? 0) - g.gain)) > 0.01
     )
-      add(p, 'Gain and rounded cost/proceeds do not reconcile.');
+      add(p, 'Gain and rounded proceeds, cost and transfer expenditure do not reconcile.');
     if (g.kind === 'review' && (g.confirmed || !g.reason.trim()))
       add(p, 'Review records must be unconfirmed and include a reason.');
   });
@@ -284,6 +298,7 @@ export function importPortFinTaxData(
           g.quantity,
           g.costBasis,
           g.saleProceeds,
+          g.transferExpenditure ?? 0,
           g.gain,
           g.kind,
           g.asset,

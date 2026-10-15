@@ -35,6 +35,39 @@ function reconcile(data: PortFinExport) {
 }
 
 describe('PortFin version 1 import', () => {
+  it('accepts current exports with expenses and deducts them exactly once', () => {
+    const d = sample();
+    d.gains[0].transferExpenditure = 25;
+    d.gains[0].gain -= 25;
+    d.gains[1].transferExpenditure = 0;
+    const result = importPortFinTaxData(reconcile(d), emptyInput());
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.input.gains[0].amount).toBe(975);
+    expect(result.ok && result.reviewRequired).toBe(false);
+  });
+  it('treats absent legacy expenses and explicit zero as the same import', () => {
+    const first = importPortFinTaxData(sample(), emptyInput());
+    if (!first.ok) throw new Error('fixture');
+    const d = sample();
+    d.gains.forEach((g) => {
+      g.transferExpenditure = 0;
+    });
+    const result = importPortFinTaxData(d, first.input, { previousFingerprint: first.fingerprint });
+    expect(result.ok && result.duplicate).toBe(true);
+  });
+  it.each([-1, 0.001, null, '25', Infinity, 1e13])(
+    'rejects invalid transfer expenditure %s',
+    (fee) => {
+      const d = sample();
+      Object.assign(d.gains[0], { transferExpenditure: fee });
+      expect(importPortFinTaxData(d, emptyInput()).ok).toBe(false);
+    },
+  );
+  it('rejects expenses that do not reconcile with the exported gain', () => {
+    const d = sample();
+    d.gains[0].transferExpenditure = 25;
+    expect(importPortFinTaxData(d, emptyInput()).ok).toBe(false);
+  });
   it('canonical fingerprints ignore generation time, export-local IDs and object order', () => {
     const first = importPortFinTaxData(sample(), emptyInput());
     if (!first.ok) throw new Error('fixture');

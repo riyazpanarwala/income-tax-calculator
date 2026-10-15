@@ -12,7 +12,7 @@ The canonical synthetic fixture is `tests/fixtures/portfin-v1.json`, generated b
 - `warnings`: completeness warnings that block an estimate.
 - `reconciliation`: matched sale count, lot count, review/loss lot count and signed total gain.
 
-No tax liability, credentials, account IDs or Prisma objects are exported. Money is rounded to paise per lot; reconciliation uses those exported amounts. Up to one paisa of independently rounded proceeds/cost difference is tolerated. Quantities retain FIFO precision.
+No tax liability, credentials, account IDs or Prisma objects are exported. Money is rounded to paise per lot; reconciliation uses those exported amounts. Lots may include `transferExpenditure`, a non-negative amount rounded to paise; older v1 exports omit it and are treated as zero. Validation reconciles proceeds minus cost minus transfer expenditure to the exported gain, allowing one paisa for independent rounding. The exported gain is imported without deducting expenses again. Quantities retain FIFO precision.
 
 ## Mapping and review
 
@@ -43,7 +43,7 @@ The first import can explicitly merge after reviewing broker/manual overlap. Exa
 - Generic PortFin holding periods use 365 days. Calendar-anniversary disagreements require review without changing PortFin's Tax tab numbers.
 - PortFin groups FIFO by symbol and loads the first portfolio. There is no broker/account-aware lot identity. Do not treat this as an account-reconciled consolidated ledger.
 - Corporate actions modify historical quantity/price in place, without an action ledger. The adapter preserves the resulting FIFO amounts; it cannot independently verify bonus/grandfathering treatment.
-- FIFO cost/proceeds are the existing quantity-times-price values; brokerage is not incorporated by that source calculation. Verify allowable costs before confirming tax eligibility.
+- Current PortFin exports can supply adjusted tax cost and separately itemised transfer expenditure. Older exports do not itemise transfer expenditure. Verify allowable costs before confirming tax eligibility; the importer checks arithmetic, not expense deductibility.
 - Missing purchases, potentially truncated trade loading (1,000 records), and unsupported cases block reliance on an estimate. The UI passes raw trades to the export adapter for sale-quantity reconciliation. Holdings alone cannot reveal completely dropped unmatched sales.
 - Existing set-off, surcharge allocation, grandfathering and other engine scope restrictions remain in force.
 
