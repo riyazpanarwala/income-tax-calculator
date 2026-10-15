@@ -6,6 +6,8 @@ import Breakdown, { LedgerRow } from './Breakdown';
 import { money, whole, percent, inputNumber, parseAmount } from './format';
 import { parseBrokerFile, KNOWN_BROKERS } from './brokerParser';
 import { PortFinImport, type PortFinSession } from './integrations/PortFinImport';
+import { ShoonyaFnoImport, type FnoSession } from './integrations/ShoonyaFnoImport';
+import type { ShoonyaFnoStatement } from './integrations/shoonyaFno';
 
 export interface BrokerItem {
   id: string;
@@ -151,6 +153,8 @@ const sourceAct =
 export default function App() {
   const [input, setInput] = useState<TaxInput>(example);
   const [portfinSession, setPortfinSession] = useState<PortFinSession>({});
+  const [fnoPreview, setFnoPreview] = useState<ShoonyaFnoStatement | null>(null);
+  const [fnoSession, setFnoSession] = useState<FnoSession | null>(null);
   const [sample, setSample] = useState(true);
   const [revision, setRevision] = useState(0);
   const [tab, setTab] = useState('calculator');
@@ -209,6 +213,13 @@ export default function App() {
     });
   };
 
+  const showFnoPreview = (statement: ShoonyaFnoStatement) => {
+    setFnoPreview(statement);
+    setTab('calculator');
+    requestAnimationFrame(() =>
+      document.getElementById('business')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
   const handleFiles = async (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
     if (!files.length) return;
@@ -216,10 +227,22 @@ export default function App() {
     setUploadNotice(null);
     try {
       let nextBrokers = [...brokers];
+      let changedBrokers = false;
       const messages: string[] = [];
       for (const file of files) {
         const parsed = await parseBrokerFile(file);
+        if (parsed.derivative) {
+          if (files.length === 1) {
+            showFnoPreview(parsed.derivative);
+            messages.push('Shoonya F&O detected. Review the import under Business / profession.');
+          } else
+            messages.push(
+              'Upload the F&O statement on its own so its period and totals can be reviewed.',
+            );
+          continue;
+        }
         if (parsed.success) {
+          changedBrokers = true;
           const existingIdx = nextBrokers.findIndex(
             (b) =>
               b.broker.toLowerCase() === parsed.brokerName.toLowerCase() ||
@@ -250,8 +273,10 @@ export default function App() {
           messages.push(`⚠ ${file.name}: ${parsed.error || 'Could not detect numbers'}`);
         }
       }
-      setBrokers(nextBrokers);
-      syncBrokers(nextBrokers);
+      if (changedBrokers) {
+        setBrokers(nextBrokers);
+        syncBrokers(nextBrokers);
+      }
       if (messages.length) {
         setUploadNotice(messages.join(' | '));
       }
@@ -261,6 +286,8 @@ export default function App() {
   };
 
   const reset = (demo: boolean) => {
+    setFnoPreview(null);
+    setFnoSession(null);
     setPortfinSession({});
     setInput(demo ? example() : emptyInput());
     setSample(demo);
@@ -316,18 +343,32 @@ export default function App() {
   };
 
   const rules = taxYears[input.year];
-  const calculation = portfinSession.accepted?.reviewRequired
-    ? {
-        ok: false as const,
-        issues: [
-          {
-            path: 'PortFin import',
-            message:
-              'Unresolved classifications, losses or incomplete source records require review. Replace or discard the PortFin import in Capital gains before calculating.',
-          },
-        ],
-      }
-    : calculateFinalTax(input);
+  const calculation =
+    fnoSession && (fnoSession.reviewRequired || fnoSession.statement.financialYear !== input.year)
+      ? {
+          ok: false as const,
+          issues: [
+            {
+              path: 'Shoonya F&O import',
+              message:
+                fnoSession.statement.financialYear !== input.year
+                  ? 'The imported F&O statement belongs to a different financial year. Replace or remove it.'
+                  : fnoSession.statement.reviewReasons.join(' '),
+            },
+          ],
+        }
+      : portfinSession.accepted?.reviewRequired
+        ? {
+            ok: false as const,
+            issues: [
+              {
+                path: 'PortFin import',
+                message:
+                  'Unresolved classifications, losses or incomplete source records require review. Replace or discard the PortFin import in Capital gains before calculating.',
+              },
+            ],
+          }
+        : calculateFinalTax(input);
   const result = calculation.ok ? calculation.result : null;
   const fields = <K extends 'salary' | 'other' | 'payments'>(
     group: K,
@@ -1016,7 +1057,27 @@ export default function App() {
                       num="04"
                       title="Business / profession"
                       caption="Already-computed taxable profit"
+                      open={!!fnoPreview || !!fnoSession}
                     >
+                      <ShoonyaFnoImport
+                        input={input}
+                        preview={fnoPreview}
+                        setPreview={setFnoPreview}
+                        session={fnoSession}
+                        onImport={(session, next) => {
+                          setFnoSession(session);
+                          setInput({ ...next, unsupported: input.unsupported });
+                          setSample(false);
+                        }}
+                        onRemove={() => {
+                          if (fnoSession)
+                            update((x) => {
+                              x.business = fnoSession.previousBusiness;
+                            });
+                          setFnoSession(null);
+                          setFnoPreview(null);
+                        }}
+                      />
                       <Amount
                         label="Taxable business or professional profit"
                         value={input.business}
@@ -1244,6 +1305,17 @@ export default function App() {
                                         if (e.target.files?.[0]) {
                                           const file = e.target.files[0];
                                           const parsed = await parseBrokerFile(file);
+                                          e.target.value = '';
+                                          if (parsed.derivative) {
+                                            showFnoPreview(parsed.derivative);
+                                            return;
+                                          }
+                                          if (!parsed.success) {
+                                            setUploadNotice(
+                                              `⚠ ${file.name}: ${parsed.error || 'Could not read statement'}`,
+                                            );
+                                            return;
+                                          }
                                           const updated = brokers.map((b) =>
                                             b.id === item.id
                                               ? {

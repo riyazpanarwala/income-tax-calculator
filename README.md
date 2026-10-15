@@ -28,7 +28,17 @@ Repeat imports do not append duplicate gains. Files are processed locally in bro
 
 If your browser does not save downloads, use PortFin's **Copy JSON** (or **View JSON**) and the calculator's **Paste PortFin JSON** option. Pasted data uses the same validation and confirmation preview as files.
 
-## Verification commands
+## Upload a Shoonya F&O statement
+
+Open **Business / profession → Upload Shoonya F&O Excel** and choose the original `DerivativePLStatement.xlsx`. The existing broker statement uploader also detects this format and opens the F&O preview instead of putting it into capital gains.
+
+The preview shows the report period, contract count, gross P&L, individual charges and net ledger P&L. It validates the financial year and reconciles contract rows, totals and charges. Repeated MTM/premium summaries are not added together. The file is read locally; account identifiers and the original workbook are not stored in the repository or sent to a server.
+
+After reconciliation and explicit confirmation, a positive result can replace the business-profit field. Importing the same report again does not add it twice. Losses, brought-forward amounts and open-position valuations are retained for review and withhold the tax estimate; the current engine does not implement business-loss set-off or carry-forward. Salary, capital gains, payments and user-selected scope flags are preserved. A part-year report is clearly labelled and must not be mistaken for the final annual result.
+
+F&O is kept separate from equity capital gains; see the Income Tax Department's [business or profession guidance](https://www.incometaxindia.gov.in/w/business-or-profession). Broker P&L still needs reconciliation with contract notes and applicable tax adjustments. Turnover, tax-audit eligibility and return filing are not calculated by this importer.
+
+## Validation commands
 
 ```powershell
 npm.cmd test

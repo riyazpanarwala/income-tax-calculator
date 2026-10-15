@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { detectShoonyaFno, type ShoonyaFnoStatement } from './integrations/shoonyaFno';
 
 export interface ParsedBrokerResult {
   success: boolean;
@@ -8,6 +9,7 @@ export interface ParsedBrokerResult {
   ltcg112A: number;
   details?: string;
   error?: string;
+  derivative?: ShoonyaFnoStatement;
 }
 
 export const KNOWN_BROKERS = [
@@ -140,6 +142,19 @@ function isTableHeaderRow(row: unknown[]): boolean {
 }
 
 export function parseWorkbookData(workbook: XLSX.WorkBook, fileName: string): ParsedBrokerResult {
+  const fno = detectShoonyaFno(workbook, fileName);
+  if (fno.detected)
+    return {
+      success: false,
+      brokerName: 'Shoonya (Finvasia)',
+      fileName,
+      stcg111A: 0,
+      ltcg112A: 0,
+      derivative: fno.statement,
+      error:
+        fno.error ||
+        'F&O statement detected. Review it under Business / profession, not capital gains.',
+    };
   let headerText = '';
   let bestCandidate: ExtractionCandidate = {
     stcg: 0,
@@ -347,6 +362,7 @@ export function parseWorkbookData(workbook: XLSX.WorkBook, fileName: string): Pa
 
 export async function parseBrokerFile(file: File): Promise<ParsedBrokerResult> {
   try {
+    if (file.size > 10_000_000) throw new Error('Statement exceeds the 10 MB limit.');
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: 'array' });
     return parseWorkbookData(workbook, file.name);
