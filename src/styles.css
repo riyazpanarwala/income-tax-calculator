@@ -1614,3 +1614,8 @@ tbody tr.muted {
   gap: 16px;
   margin-top: 16px;
 }
+.portfin-review-reason {
+  min-width: 240px;
+  white-space: normal;
+  text-align: left;
+}

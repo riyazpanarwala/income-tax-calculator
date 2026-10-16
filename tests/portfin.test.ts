@@ -4,6 +4,8 @@ import {
   importPortFinTaxData,
   parsePortFinJson,
   type PortFinExport,
+  portFinReviewIssues,
+  portFinReviewRecords,
 } from '../src/integrations/portfin';
 import { emptyInput } from '../src/tax-engine/types';
 import { calculateFinalTax } from '../src/tax-engine/calculateFinalTax';
@@ -176,6 +178,67 @@ describe('PortFin version 1 import', () => {
     expect(result.ok && result.input.gains.map((g) => g.amount)).toEqual([1000]);
     expect(result.ok && result.input.unsupported.losses).toBe(true);
     expect(result.ok && calculateFinalTax(result.input).ok).toBe(false);
+  });
+  it('explains a 63-lot mixed export and retains all 31 excluded loss lots for review', () => {
+    const d = sample();
+    const positive = {
+      ...d.gains[0],
+      kind: '112' as const,
+      asset: 'other' as const,
+      gain: 100,
+      saleProceeds: 1100,
+    };
+    const negative = {
+      ...d.gains[1],
+      kind: 'otherSTCG' as const,
+      asset: 'other' as const,
+      gain: -50,
+      saleProceeds: 1450,
+    };
+    d.gains = Array.from({ length: 63 }, (_, i) => ({
+      ...(i < 32 ? positive : negative),
+      id: `synthetic-lot-${i}`,
+      transaction: `synthetic-sale-${i % 9}`,
+    }));
+    const result = importPortFinTaxData(reconcile(d), emptyInput());
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    expect(result.importedCount).toBe(32);
+    expect(result.reviewCount).toBe(31);
+    expect(result.reviewRequired).toBe(true);
+    expect(portFinReviewIssues(result)).toEqual([
+      {
+        path: 'PortFin capital losses',
+        message: expect.stringContaining('31 loss lots totalling ₹1,550.00'),
+      },
+    ]);
+    expect(portFinReviewIssues(result)[0].message).toContain('Only 32');
+    expect(portFinReviewRecords(result)).toHaveLength(31);
+    expect(portFinReviewRecords(result).every(({ gain }) => gain.gain === -50)).toBe(true);
+    // Confirming the visible positive rows must not clear review of excluded losses.
+    result.input.gains.forEach((gain) => {
+      gain.confirmed = true;
+    });
+    expect(portFinReviewIssues(result)).toHaveLength(1);
+    expect(calculateFinalTax(result.input).ok).toBe(false);
+  });
+  it('distinguishes source warnings and lot classifications from unsupported loss set-off', () => {
+    const d = sample();
+    d.gains[0].kind = 'review';
+    d.gains[0].confirmed = false;
+    d.gains[0].reason = 'Instrument tax eligibility needs confirmation';
+    d.warnings = ['Purchases are incomplete'];
+    const result = importPortFinTaxData(reconcile(d), emptyInput());
+    if (!result.ok) throw new Error('fixture');
+    expect(portFinReviewIssues(result).map((issue) => issue.path)).toEqual([
+      'PortFin source warning',
+      'PortFin lot review',
+    ]);
+    expect(portFinReviewRecords(result)).toHaveLength(1);
+    expect(portFinReviewRecords(result)[0].gain.id).toBe(d.gains[0].id);
+    const complete = importPortFinTaxData(sample(), emptyInput());
+    if (!complete.ok) throw new Error('fixture');
+    expect(portFinReviewIssues(complete)).toEqual([]);
+    expect(portFinReviewRecords(complete)).toEqual([]);
   });
   it('blocks positive partial estimates when report completeness warnings exist', () => {
     const d = sample();

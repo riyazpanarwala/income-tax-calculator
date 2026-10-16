@@ -1,11 +1,73 @@
 import { useRef, useState } from 'react';
 import type { TaxInput } from '../tax-engine/types';
-import { importPortFinTaxData, parsePortFinJson, type ImportResult } from './portfin';
+import {
+  importPortFinTaxData,
+  parsePortFinJson,
+  portFinReviewIssues,
+  portFinReviewRecords,
+  type ImportResult,
+} from './portfin';
 import { money } from '../format';
 
 export interface PortFinSession {
   previous?: TaxInput;
   accepted?: Extract<ImportResult, { ok: true }>;
+}
+
+function PortFinReview({ result }: { result: Extract<ImportResult, { ok: true }> }) {
+  const records = portFinReviewRecords(result);
+  return (
+    <div>
+      <ul>
+        {portFinReviewIssues(result).map((issue, i) => (
+          <li key={i}>{issue.message}</li>
+        ))}
+      </ul>
+      {records.length > 0 && (
+        <details>
+          <summary>{records.length} lots excluded from the editable capital gains</summary>
+          <p>
+            These signed amounts remain in the import for review. Losses have not been discarded or
+            converted into gains.
+          </p>
+          <div className="table-scroll">
+            <table>
+              <caption>PortFin lots requiring review</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Instrument</th>
+                  <th scope="col">Acquired</th>
+                  <th scope="col">Sold</th>
+                  <th scope="col">Export category</th>
+                  <th scope="col">Gain / loss</th>
+                  <th scope="col">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map(({ gain, reason }) => (
+                  <tr key={gain.id}>
+                    <td>{gain.instrument.symbol}</td>
+                    <td>{gain.acquired}</td>
+                    <td>{gain.sold}</td>
+                    <td>
+                      {gain.kind} / {gain.asset}
+                    </td>
+                    <td>{money(gain.gain)}</td>
+                    <td className="portfin-review-reason">{reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+      <p className="note">
+        Tax categories come from the PortFin export. Check the instrument and tax classification in
+        PortFin before exporting again; this importer does not infer equity eligibility from a
+        symbol or exchange.
+      </p>
+    </div>
+  );
 }
 export function PortFinImport({
   input,
@@ -44,7 +106,7 @@ export function PortFinImport({
     setError('');
   };
   return (
-    <div className="repeat-card">
+    <div id="portfin-import" className="repeat-card">
       <button className="secondary" onClick={() => file.current?.click()}>
         Import from PortFin
       </button>
@@ -147,10 +209,16 @@ export function PortFinImport({
               some records can be imported.
             </p>
           )}
+          {preview.reviewRequired && <PortFinReview result={preview} />}
           <ul>
-            {preview.warnings.map((w, i) => (
-              <li key={i}>{w.message}</li>
-            ))}
+            {preview.warnings
+              .filter(
+                (w) =>
+                  !preview.reviewRequired || (w.path !== 'portfin' && !/^gains\.\d+$/.test(w.path)),
+              )
+              .map((w, i) => (
+                <li key={i}>{w.message}</li>
+              ))}
           </ul>
           {preview.duplicate && (
             <p>This export was already imported. Confirming will leave your gains unchanged.</p>
@@ -159,7 +227,11 @@ export function PortFinImport({
             Cancel
           </button>{' '}
           <button className="primary" onClick={() => accept('replace')}>
-            {input.gains.length ? 'Replace capital gains' : 'Import gains'}
+            {preview.reviewRequired
+              ? 'Import for review — estimate withheld'
+              : input.gains.length
+                ? 'Replace capital gains'
+                : 'Import gains'}
           </button>{' '}
           {input.gains.length > 0 && !accepted && (
             <button className="secondary" onClick={() => accept('merge')}>
@@ -171,20 +243,17 @@ export function PortFinImport({
       {accepted && (
         <div role="status">
           <p>
-            PortFin imported · FY {accepted.data.financialYear}. Edit or remove individual gains
-            below.
+            PortFin imported · FY {accepted.data.financialYear}. {accepted.importedCount} of{' '}
+            {accepted.data.gains.length} lots appear in the editable capital gains below.
           </p>
           {accepted.reviewRequired && (
             <>
               <p>
-                Unresolved PortFin records: estimate withheld. Reconcile the source and replace this
-                import, or discard it before proceeding.
+                Estimate withheld. Review the excluded records below. Replace the import when the
+                source issues are resolved. Discard restores the previous capital gains; it does not
+                calculate tax on this export.
               </p>
-              <ul>
-                {accepted.warnings.map((w, i) => (
-                  <li key={i}>{w.message}</li>
-                ))}
-              </ul>
+              <PortFinReview result={accepted} />
             </>
           )}
           <button

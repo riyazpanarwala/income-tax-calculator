@@ -9,6 +9,7 @@ import { PortFinImport, type PortFinSession } from './integrations/PortFinImport
 import { ShoonyaFnoImport, type FnoSession } from './integrations/ShoonyaFnoImport';
 import type { ShoonyaFnoStatement } from './integrations/shoonyaFno';
 import { IncomeWorkbookImport } from './integrations/IncomeWorkbookImport';
+import { portFinReviewIssues } from './integrations/portfin';
 
 export interface BrokerItem {
   id: string;
@@ -361,13 +362,7 @@ export default function App() {
       : portfinSession.accepted?.reviewRequired
         ? {
             ok: false as const,
-            issues: [
-              {
-                path: 'PortFin import',
-                message:
-                  'Unresolved classifications, losses or incomplete source records require review. Replace or discard the PortFin import in Capital gains before calculating.',
-              },
-            ],
+            issues: portFinReviewIssues(portfinSession.accepted),
           }
         : calculateFinalTax(input);
   const result = calculation.ok ? calculation.result : null;
@@ -1733,6 +1728,23 @@ export default function App() {
                         </li>
                       ))}
                     </ul>
+                    {portfinSession.accepted?.reviewRequired && (
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          setTab('calculator');
+                          requestAnimationFrame(() => {
+                            const gains = document.getElementById('gains');
+                            if (gains instanceof HTMLDetailsElement) gains.open = true;
+                            document
+                              .getElementById('portfin-import')
+                              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          });
+                        }}
+                      >
+                        View PortFin import details
+                      </button>
+                    )}
                   </div>
                 )}
                 {calculation.ok &&

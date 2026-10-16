@@ -51,6 +51,40 @@ export type ImportResult =
     };
 
 const round = (n: number) => Number(n.toFixed(2));
+
+/** Explain the actual blockers instead of suggesting every import failure is a classification error. */
+export function portFinReviewIssues(result: Extract<ImportResult, { ok: true }>): Issue[] {
+  if (!result.reviewRequired) return [];
+  const losses = result.data.gains.filter((g) => g.gain < 0);
+  const issues: Issue[] = [];
+  if (losses.length) {
+    const total = round(losses.reduce((sum, g) => sum - g.gain, 0));
+    issues.push({
+      path: 'PortFin capital losses',
+      message: `${losses.length} loss lots totalling ₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. This calculator does not support capital-loss set-off or carry-forward. Only ${result.importedCount} supported non-negative lots appear in the editable fields; calculating from those alone would give an incomplete estimate. Checking or editing those fields cannot resolve the excluded losses.`,
+    });
+  }
+  for (const warning of result.warnings) {
+    const match = /^gains\.(\d+)$/.exec(warning.path);
+    if (match && result.data.gains[Number(match[1])]?.gain < 0) continue;
+    if (warning.path === 'portfin' || match) {
+      issues.push({
+        path: match ? 'PortFin lot review' : 'PortFin source warning',
+        message: warning.message,
+      });
+    }
+  }
+  return issues;
+}
+
+export function portFinReviewRecords(result: Extract<ImportResult, { ok: true }>) {
+  return result.warnings.flatMap((warning) => {
+    const match = /^gains\.(\d+)$/.exec(warning.path);
+    const gain = match && result.data.gains[Number(match[1])];
+    return gain ? [{ gain, reason: warning.message }] : [];
+  });
+}
+
 const dateValid = (s: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(s) &&
   Number.isFinite(Date.parse(s)) &&
