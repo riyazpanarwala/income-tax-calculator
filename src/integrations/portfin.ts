@@ -1,6 +1,7 @@
 import type { Gain, Issue, TaxInput } from '../tax-engine/types';
 import { taxYears } from '../tax-rules';
 import { validate } from '../tax-engine/validate';
+import { add as sum, subtract, multiply, roundPaise } from '../tax-engine/arithmetic';
 
 type Bucket = { gain: number; loss: number };
 export interface PortFinGain {
@@ -20,6 +21,7 @@ export interface PortFinGain {
   gain: number;
   holdingDays: number;
   source: 'fifo';
+  grandfathering?: Gain['grandfathering'];
 }
 export interface PortFinExport {
   schemaVersion: 1;
@@ -50,23 +52,14 @@ export type ImportResult =
       duplicate: boolean;
     };
 
-const round = (n: number) => Number(n.toFixed(2));
+const round = roundPaise;
 
 /** Explain the actual blockers instead of suggesting every import failure is a classification error. */
 export function portFinReviewIssues(result: Extract<ImportResult, { ok: true }>): Issue[] {
   if (!result.reviewRequired) return [];
-  const losses = result.data.gains.filter((g) => g.gain < 0);
   const issues: Issue[] = [];
-  if (losses.length) {
-    const total = round(losses.reduce((sum, g) => sum - g.gain, 0));
-    issues.push({
-      path: 'PortFin capital losses',
-      message: `${losses.length} loss lots totalling ₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. This calculator does not support capital-loss set-off or carry-forward. Only ${result.importedCount} supported non-negative lots appear in the editable fields; calculating from those alone would give an incomplete estimate. Checking or editing those fields cannot resolve the excluded losses.`,
-    });
-  }
   for (const warning of result.warnings) {
     const match = /^gains\.(\d+)$/.exec(warning.path);
-    if (match && result.data.gains[Number(match[1])]?.gain < 0) continue;
     if (warning.path === 'portfin' || match) {
       issues.push({
         path: match ? 'PortFin lot review' : 'PortFin source warning',
@@ -74,7 +67,93 @@ export function portFinReviewIssues(result: Extract<ImportResult, { ok: true }>)
       });
     }
   }
-  return issues;
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = `${issue.path}:${issue.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export const needsGrandfathering = (g: PortFinGain) =>
+  g.kind === 'review' &&
+  g.reason === 'Grandfathering requires a separately verified cost basis.' &&
+  g.acquired < '2018-02-01';
+
+/** Reporting totals include review lots; they are never substituted for verified taxable gains. */
+export function portFinReport(data: PortFinExport) {
+  const rows = {
+    short: { gain: 0, loss: 0 },
+    long: { gain: 0, loss: 0 },
+    unclassified: { gain: 0, loss: 0 },
+  };
+  for (const g of data.gains) {
+    const term = ['111A', 'otherSTCG'].includes(g.kind)
+      ? 'short'
+      : ['112A', '112', 'otherLTCG'].includes(g.kind) || needsGrandfathering(g)
+        ? 'long'
+        : 'unclassified';
+    const field = g.gain < 0 ? 'loss' : 'gain';
+    rows[term][field] = sum(rows[term][field], Math.abs(g.gain));
+  }
+  return Object.entries(rows).map(([term, b]) => ({ term, ...b, net: subtract(b.gain, b.loss) }));
+}
+
+export function resolveGrandfathering(
+  data: PortFinExport,
+  symbol: string,
+  fmvPerUnit: number,
+  source: string,
+  eligible: boolean,
+): PortFinExport {
+  if (
+    !eligible ||
+    !source.trim() ||
+    source.length > 2000 ||
+    !Number.isFinite(fmvPerUnit) ||
+    fmvPerUnit < 0 ||
+    fmvPerUnit > 1e12
+  )
+    throw new Error(
+      'Enter the verified 31 January 2018 FMV per unit and its source, and confirm equity / STT eligibility.',
+    );
+  const next = structuredClone(data);
+  const matches = next.gains.filter(
+    (g) => g.instrument.symbol === symbol && needsGrandfathering(g),
+  );
+  if (!matches.length) throw new Error('No grandfathering review lots found for this instrument.');
+  for (const g of matches) {
+    const fairMarketValue = round(multiply(g.quantity, fmvPerUnit));
+    const originalCost = g.costBasis;
+    g.grandfathering = {
+      originalCost,
+      fairMarketValue,
+      saleProceeds: g.saleProceeds,
+      expenses: g.transferExpenditure ?? 0,
+      source: source.trim(),
+    };
+    g.costBasis = Math.max(originalCost, Math.min(fairMarketValue, g.saleProceeds));
+    g.gain = subtract(g.saleProceeds, g.costBasis, g.transferExpenditure ?? 0);
+    g.kind = '112A';
+    g.asset = 'equity';
+    g.confirmed = true;
+    g.reason = '';
+  }
+  Object.values(next.summary).forEach((b) => {
+    b.gain = 0;
+    b.loss = 0;
+  });
+  for (const g of next.gains) {
+    const bucket = next.summary[bucketFor(g.kind)],
+      field = g.gain < 0 ? 'loss' : 'gain';
+    bucket[field] = sum(bucket[field], Math.abs(g.gain));
+  }
+  next.reconciliation.reviewCount = next.gains.filter(
+    (g) => g.kind === 'review' || g.gain < 0,
+  ).length;
+  next.reconciliation.totalGain = sum(...next.gains.map((g) => g.gain));
+  return next;
 }
 
 export function portFinReviewRecords(result: Extract<ImportResult, { ok: true }>) {
@@ -100,7 +179,15 @@ const bucketFor = (kind: PortFinGain['kind']): keyof PortFinExport['summary'] =>
 
 // Canonical serialized values are collision-free fingerprints; no account/database IDs.
 export const gainFingerprint = (g: Gain) =>
-  JSON.stringify([g.kind, g.asset, g.amount, g.acquired, g.sold, g.confirmed]);
+  JSON.stringify([
+    g.kind,
+    g.asset,
+    g.amount,
+    g.acquired,
+    g.sold,
+    g.confirmed,
+    g.grandfathering ?? null,
+  ]);
 
 export function parsePortFinJson(text: string): unknown {
   if (text.length > 5_000_000) throw new Error('PortFin file exceeds the 5 MB limit.');
@@ -138,7 +225,7 @@ export function importPortFinTaxData(
       Object.entries(fields).forEach(([k, t]) => {
         // Older v1 exports predate the optional, separately itemised sale expenses.
         if (
-          k === 'transferExpenditure' &&
+          ['transferExpenditure', 'grandfathering'].includes(k) &&
           /^portfin\.gains\.\d+$/.test(path) &&
           !Object.hasOwn(obj, k)
         )
@@ -186,6 +273,13 @@ export function importPortFinTaxData(
           gain: 0,
           holdingDays: 0,
           source: '',
+          grandfathering: {
+            originalCost: 0,
+            fairMarketValue: 0,
+            saleProceeds: 0,
+            expenses: 0,
+            source: '',
+          },
         },
       ],
       warnings: [''],
@@ -269,6 +363,21 @@ export function importPortFinTaxData(
       add(p, 'Gain and rounded proceeds, cost and transfer expenditure do not reconcile.');
     if (g.kind === 'review' && (g.confirmed || !g.reason.trim()))
       add(p, 'Review records must be unconfirmed and include a reason.');
+    if (g.grandfathering) {
+      const b = g.grandfathering;
+      if (
+        [b.originalCost, b.fairMarketValue, b.saleProceeds, b.expenses].some(
+          (n) => n < 0 || round(n) !== n,
+        ) ||
+        g.costBasis !== Math.max(b.originalCost, Math.min(b.fairMarketValue, b.saleProceeds)) ||
+        b.saleProceeds !== g.saleProceeds ||
+        b.expenses !== (g.transferExpenditure ?? 0)
+      )
+        add(
+          p,
+          'Grandfathering inputs do not reconcile with the exported cost, proceeds and expenses.',
+        );
+    }
   });
   for (const k of Object.keys(totals) as (keyof typeof totals)[]) {
     if (totals[k].gain !== d.summary[k].gain || totals[k].loss !== d.summary[k].loss)
@@ -287,35 +396,31 @@ export function importPortFinTaxData(
   const warnings: Issue[] = d.warnings.map((message) => ({ path: 'portfin', message }));
   const gains: Gain[] = [];
   let reviewCount = 0;
-  let loss = false;
   let unsupported = d.warnings.length > 0;
   d.gains.forEach((g, i) => {
-    if (g.gain < 0) loss = true;
     const mapped: Gain | null =
       g.kind === 'review'
         ? null
         : {
             kind: g.kind,
             asset: g.asset,
-            amount: Math.max(0, g.gain),
+            amount: g.gain,
             acquired: g.acquired,
             sold: g.sold,
             confirmed: g.confirmed,
+            ...(g.grandfathering ? { grandfathering: g.grandfathering } : {}),
           };
     const issues = mapped
       ? validate({ ...currentTaxInput, gains: [mapped] }, taxYears[currentTaxInput.year]).filter(
           (issue) => issue.path.startsWith('gains.'),
         )
       : [];
-    if (!mapped || g.gain < 0 || issues.length || !g.confirmed) {
+    if (!mapped || issues.length || !g.confirmed) {
       reviewCount++;
       if (!mapped || issues.length || !g.confirmed) unsupported = true;
       warnings.push({
         path: `gains.${i}`,
-        message:
-          g.gain < 0
-            ? `${g.instrument.symbol}: capital loss ${g.gain}; loss set-off is unsupported and the estimate is withheld.`
-            : `${g.instrument.symbol}: ${g.reason || issues.map((x) => x.message).join(' ') || 'Classification needs confirmation.'}`,
+        message: `${g.instrument.symbol}: ${[g.reason, ...issues.map((x) => x.message)].filter(Boolean).join(' ') || 'Classification needs confirmation.'}`,
       });
     } else gains.push(mapped);
   });
@@ -338,6 +443,7 @@ export function importPortFinTaxData(
           g.asset,
           g.confirmed,
           g.reason,
+          g.grandfathering ?? null,
         ]),
       )
       .sort(),
@@ -381,6 +487,16 @@ export function importPortFinTaxData(
         },
       ],
     };
+  const allocationIssues = validate(
+    { ...currentTaxInput, gains: next },
+    taxYears[currentTaxInput.year],
+  ).filter((issue) => issue.path === 'gains');
+  if (allocationIssues.length) {
+    unsupported = true;
+    warnings.push(
+      ...allocationIssues.map((issue) => ({ path: 'portfin', message: issue.message })),
+    );
+  }
   if (currentTaxInput.gains.length)
     warnings.unshift({
       path: 'gains',
@@ -392,7 +508,7 @@ export function importPortFinTaxData(
     data: d,
     warnings,
     reviewCount,
-    reviewRequired: loss || unsupported,
+    reviewRequired: unsupported,
     importedCount: gains.length,
     fingerprint,
     duplicate,
@@ -403,7 +519,6 @@ export function importPortFinTaxData(
           gains: next,
           unsupported: {
             ...currentTaxInput.unsupported,
-            losses: currentTaxInput.unsupported.losses || loss,
             otherSpecial: currentTaxInput.unsupported.otherSpecial || unsupported,
           },
         },

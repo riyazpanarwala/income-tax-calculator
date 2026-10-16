@@ -65,11 +65,13 @@ function Amount({
   value,
   onChange,
   hint,
+  allowNegative = false,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   hint?: string;
+  allowNegative?: boolean;
 }) {
   const [raw, setRaw] = useState(inputNumber(value));
   const [prevVal, setPrevVal] = useState(value);
@@ -91,7 +93,7 @@ function Amount({
           onChange={(e) => {
             const text = e.target.value;
             setRaw(text);
-            onChange(parseAmount(text));
+            onChange(parseAmount(text, allowNegative));
           }}
           onBlur={() => {
             if (Number.isFinite(value)) setRaw(inputNumber(value));
@@ -523,18 +525,18 @@ export default function App() {
                 <h2>What this release supports</h2>
                 <p>
                   Ordinary income, computed business profits, property income with restricted
-                  set-off, employer NPS, government Agniveer contribution, and classified
-                  non-negative capital gains. Capital gain amounts must already reflect the legally
-                  applicable cost and eligible exemptions; the 112A tax band is applied
-                  automatically.
+                  set-off, employer NPS, government Agniveer contribution, and classified capital
+                  gains with current-year eligible equity loss set-off. Capital gain amounts must
+                  already reflect the legally applicable cost and eligible exemptions; the 112A tax
+                  band is applied automatically.
                 </p>
                 <h3>Cases that withhold an estimate</h3>
                 <p>
-                  Salary exemptions; capital or business losses; foreign and treaty relief;
+                  Salary exemptions; business or brought-forward losses; foreign and treaty relief;
                   agricultural income; crypto, lottery and other special income; unclassified LTCG;
-                  grandfathering; protected property indexation; ambiguous basic-exemption
-                  allocation; and mixed-rate surcharge cases above ₹50 lakh. Select the relevant
-                  case in the calculator to avoid an incomplete estimate.
+                  unverified grandfathering costs; protected property indexation; ambiguous
+                  basic-exemption allocation; and mixed-rate surcharge cases above ₹50 lakh. Select
+                  the relevant case in the calculator to avoid an incomplete estimate.
                 </p>
                 <p>
                   Income entered for NRI/RNOR taxpayers must already be scoped to income taxable in
@@ -1125,6 +1127,7 @@ export default function App() {
                       num="06"
                       title="Capital gains"
                       caption="Special-rate gains stay separate from your salary"
+                      open={Boolean(portfinSession.accepted)}
                     >
                       <PortFinImport
                         input={input}
@@ -1511,7 +1514,8 @@ export default function App() {
                                   </select>
                                 </label>
                                 <Amount
-                                  label="Computed gain after eligible exemptions"
+                                  label="Computed gain / loss before annual 112A exemption"
+                                  allowNegative
                                   value={g.amount}
                                   onChange={(v) =>
                                     update((x) => {
@@ -1568,9 +1572,10 @@ export default function App() {
                             + Add capital gain
                           </button>
                           <p className="note">
-                            Pre-February 2018 equity and property acquired before 23 July 2024 are
-                            blocked for grandfathering / indexation review. Mixed special-rate
-                            surcharge cases above ₹50 lakh are unsupported.
+                            Enter current-year equity losses as negative amounts. Pre-February 2018
+                            equity requires verified grandfathering inputs in the PortFin import.
+                            Property acquired before 23 July 2024 requires indexation review. Mixed
+                            special-rate surcharge cases above ₹50 lakh are unsupported.
                           </p>
                         </>
                       )}
@@ -1604,7 +1609,7 @@ export default function App() {
                         selected.
                       </p>
                       {Object.entries({
-                        losses: 'Business / capital losses or brought-forward adjustments',
+                        losses: 'Business losses or brought-forward loss adjustments',
                         foreignRelief:
                           'Foreign income, treaty rates, foreign tax credits or arrears relief',
                         agricultural: 'Agricultural income',

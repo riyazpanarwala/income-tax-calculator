@@ -7,6 +7,13 @@ export interface Gain {
   sold: string;
   asset: 'equity' | 'property' | 'other';
   confirmed: boolean;
+  grandfathering?: {
+    originalCost: number;
+    fairMarketValue: number;
+    saleProceeds: number;
+    expenses: number;
+    source: string;
+  };
 }
 export interface TaxInput {
   year: string;

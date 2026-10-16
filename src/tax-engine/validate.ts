@@ -1,7 +1,16 @@
 import { emptyInput, type TaxInput, type Issue } from './types';
 import type { TaxRules } from '../tax-rules/types';
+import { subtract } from './arithmetic';
 const MAX = 1_000_000_000_000;
-const gainShape = { kind: '', amount: 0, acquired: '', sold: '', asset: '', confirmed: false };
+const gainShape = {
+  kind: '',
+  amount: 0,
+  acquired: '',
+  sold: '',
+  asset: '',
+  confirmed: false,
+  grandfathering: { originalCost: 0, fairMarketValue: 0, saleProceeds: 0, expenses: 0, source: '' },
+};
 const propertyShape = { occupancy: '', annualValue: 0, municipalTaxes: 0, interest: 0 };
 export function validateShape(value: unknown): Issue[] {
   const issues: Issue[] = [];
@@ -31,17 +40,25 @@ export function validateShape(value: unknown): Issue[] {
             message: 'Unknown field or unavailable deduction; no estimate was calculated.',
           }),
         );
-      Object.entries(template).forEach(([k, x]) => walk(obj[k], x, path ? `${path}.${k}` : k));
+      Object.entries(template).forEach(([k, x]) => {
+        if (k === 'grandfathering' && /^gains\.\d+$/.test(path) && !Object.hasOwn(obj, k)) return;
+        walk(obj[k], x, path ? `${path}.${k}` : k);
+      });
       return;
     }
     if (
       typeof v !== typeof t ||
       (typeof v === 'number' &&
-        (!Number.isFinite(v) || v < 0 || v > MAX || Number(v.toFixed(2)) !== v))
+        (!Number.isFinite(v) ||
+          (v < 0 && !/^gains\.\d+\.amount$/.test(path)) ||
+          Math.abs(v) > MAX ||
+          Number(v.toFixed(2)) !== v))
     )
       issues.push({
         path,
-        message: 'Enter a non-negative amount up to ₹1 lakh crore with at most two decimal places.',
+        message: /^gains\.\d+\.amount$/.test(path)
+          ? 'Enter a signed capital gain/loss up to ₹1 lakh crore with at most two decimal places.'
+          : 'Enter a non-negative amount up to ₹1 lakh crore with at most two decimal places.',
       });
   }
   walk(value, emptyInput(), '');
@@ -76,7 +93,7 @@ export function validate(input: TaxInput, r: TaxRules): Issue[] {
   const labels: Record<string, string> = {
     salaryExemptions:
       'Salary exemptions (including gratuity, leave encashment and permitted duty allowances)',
-    losses: 'Business/capital losses and brought-forward loss adjustments',
+    losses: 'Business losses and brought-forward loss adjustments',
     foreignRelief: 'Foreign income, treaty rates, tax credits and arrears relief',
     agricultural: 'Agricultural income and partial integration',
     otherSpecial: 'Other special-rate income, including crypto, lottery winnings and buybacks',
@@ -118,7 +135,7 @@ export function validate(input: TaxInput, r: TaxRules): Issue[] {
         'Other LTCG is unsupported. Have the applicable special provision identified before calculating.',
       );
     if (g.amount === 0 && !g.acquired && !g.sold) return;
-    if (g.amount > 0 && !g.confirmed)
+    if (g.amount !== 0 && !g.confirmed)
       add(
         path,
         'Confirm the gain is already computed under the selected provision, with any eligible exemption and STT conditions checked.',
@@ -141,7 +158,26 @@ export function validate(input: TaxInput, r: TaxRules): Issue[] {
         path,
         'Listed equity must use its applicable equity category; other equity cases are unsupported.',
       );
-    if (g.kind === '112A' && g.acquired < r.equityGrandfatheringBefore)
+    if (g.amount < 0 && (!['111A', '112A'].includes(g.kind) || g.asset !== 'equity'))
+      add(path, 'Current-year loss set-off supports eligible equity 111A / 112A lots only.');
+    if (g.grandfathering) {
+      const b = g.grandfathering;
+      const cost = Math.max(b.originalCost, Math.min(b.fairMarketValue, b.saleProceeds));
+      if (
+        g.kind !== '112A' ||
+        g.asset !== 'equity' ||
+        g.acquired >= r.equityGrandfatheringBefore ||
+        !g.confirmed ||
+        !b.source.trim() ||
+        b.source.length > 2000 ||
+        g.amount !== subtract(b.saleProceeds, cost, b.expenses)
+      )
+        add(
+          path,
+          'Verified grandfathering inputs must reconcile with the equity LTCG amount and include the FMV source.',
+        );
+    }
+    if (g.kind === '112A' && g.acquired < r.equityGrandfatheringBefore && !g.grandfathering)
       add(path, 'This equity requires grandfathering. This transaction is unsupported.');
     if (g.kind === '112' && g.asset === 'property' && g.acquired < r.propertyProtectionBefore)
       add(
@@ -175,5 +211,13 @@ export function validate(input: TaxInput, r: TaxRules): Issue[] {
         add(path, 'Holding period contradicts the selected property STCG/LTCG category.');
     }
   });
+  if (
+    input.gains.some((g) => g.amount < 0) &&
+    input.gains.some((g) => g.amount !== 0 && !['111A', '112A'].includes(g.kind))
+  )
+    add(
+      'gains',
+      'Loss allocation across equity and other capital-gain provisions requires separate review. Current-year equity-only set-off is supported.',
+    );
   return issues;
 }

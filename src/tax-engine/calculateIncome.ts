@@ -1,6 +1,7 @@
 import type { TaxInput } from './types';
 import type { TaxRules } from '../tax-rules/types';
 import { add, subtract, multiply, divide } from './arithmetic';
+import { calculateCapitalGains } from './calculateCapitalGains';
 export function calculateIncome(input: TaxInput, r: TaxRules) {
   const s = input.salary;
   const grossSalary = add(
@@ -33,11 +34,12 @@ export function calculateIncome(input: TaxInput, r: TaxRules) {
     r.familyPension.maximum,
   );
   const other = subtract(add(...Object.values(input.other)), familyPensionDeduction);
+  const capitalGains = calculateCapitalGains(input.gains);
   const ordinaryGains = add(
-    ...input.gains.filter((g) => g.kind === 'otherSTCG').map((g) => g.amount),
+    ...capitalGains.gains.filter((g) => g.kind === 'otherSTCG').map((g) => g.amount),
   );
   const specialGains = add(
-    ...input.gains.filter((g) => g.kind !== 'otherSTCG').map((g) => g.amount),
+    ...capitalGains.gains.filter((g) => g.kind !== 'otherSTCG').map((g) => g.amount),
   );
   const normalGross = add(salary, house, input.business, other, ordinaryGains);
   const employerNpsLimit = multiply(
@@ -60,6 +62,7 @@ export function calculateIncome(input: TaxInput, r: TaxRules) {
     other,
     business: input.business,
     ordinaryGains,
+    capitalGains,
     specialGains,
     normalGross,
     employerNpsLimit,

@@ -8,6 +8,7 @@ export const subtract = (a: number, ...values: number[]) =>
   values.reduce((total, value) => total.minus(value), new D(a)).toNumber();
 export const multiply = (a: number, b: number) => new D(a).times(b).toNumber();
 export const divide = (a: number, b: number) => new D(a).div(b).toNumber();
+export const roundPaise = (n: number) => new D(n).toDecimalPlaces(2).toNumber();
 export function roundStatutory(value: number, unit: number) {
   const n = new D(value).abs().trunc();
   return n

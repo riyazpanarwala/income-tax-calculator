@@ -20,7 +20,7 @@ function compute(input: TaxInput, r: TaxRules) {
   // Reconcile rounding against ordinary income, or the sole special category.
   // Ambiguous multi-special apportionment is blocked by the public entry point.
   let normal = income.normal;
-  const gains = input.gains.map((g) => ({ ...g }));
+  const gains = income.capitalGains.gains.map((g) => ({ ...g }));
   if (normal > 0) normal = subtract(total, income.specialGains);
   else if (gains.some((g) => g.amount > 0)) {
     const first = gains.find((g) => g.amount > 0)!;
@@ -142,7 +142,9 @@ export function calculateFinalTax(value: unknown, configuredRules?: TaxRules): C
         'Income rounding would require allocating a reduction across special gains. This rare case is unsupported.',
     });
   const specialKinds = new Set(
-    input.gains.filter((g) => g.amount > 0 && g.kind !== 'otherSTCG').map((g) => g.kind),
+    income.capitalGains.gains
+      .filter((g) => g.amount > 0 && g.kind !== 'otherSTCG')
+      .map((g) => g.kind),
   );
   if (
     specialKinds.size > 1 &&
@@ -178,6 +180,10 @@ export function calculateFinalTax(value: unknown, configuredRules?: TaxRules): C
   if (issues.length) return { ok: false, issues };
   const result = compute(input, r);
   const warnings: string[] = [];
+  if (income.capitalGains.remainingShortLoss || income.capitalGains.remainingLongLoss)
+    warnings.push(
+      `Unabsorbed current-year capital losses: STCL ₹${income.capitalGains.remainingShortLoss.toLocaleString('en-IN')}, LTCL ₹${income.capitalGains.remainingLongLoss.toLocaleString('en-IN')}. These do not reduce salary or other income. Carry-forward eligibility and brought-forward losses are not calculated.`,
+    );
   if (income.unusablePropertyLoss)
     warnings.push(
       'Net house-property loss is not set off against other income. No carry-forward benefit is calculated under section 202(3).',

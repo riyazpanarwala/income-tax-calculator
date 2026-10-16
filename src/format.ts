@@ -17,7 +17,11 @@ export const inputNumber = (n: number) =>
   n
     ? new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2, useGrouping: true }).format(n)
     : '';
-export function parseAmount(text: string): number {
+export function parseAmount(text: string, allowNegative = false): number {
+  if (allowNegative && text.startsWith('-')) {
+    const value = parseAmount(text.slice(1));
+    return text.length > 1 && Number.isFinite(value) ? -value : NaN;
+  }
   const valid =
     /^(?:\d+(?:\.\d{0,2})?|\.\d{1,2})?$/.test(text) ||
     /^\d{1,2}(?:,\d{2})*,\d{3}(?:\.\d{0,2})?$/.test(text);

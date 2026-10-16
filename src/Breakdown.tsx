@@ -40,6 +40,23 @@ export default function Breakdown({ r, rules }: { r: TaxResult; rules: TaxRules 
           label="Capital gains (normal + special)"
           value={r.income.ordinaryGains + r.income.specialGains}
         />
+        {(r.income.capitalGains.shortLoss > 0 || r.income.capitalGains.longLoss > 0) && (
+          <div className="repeat-card">
+            <h3>Current-year equity capital-loss set-off</h3>
+            <LedgerRow label="Gross STCG" value={r.income.capitalGains.grossShort} />
+            <LedgerRow label="Gross LTCG" value={r.income.capitalGains.grossLong} />
+            <LedgerRow label="Short-term losses" value={-r.income.capitalGains.shortLoss} />
+            <LedgerRow label="Long-term losses" value={-r.income.capitalGains.longLoss} />
+            <LedgerRow label="LTCL used against LTCG" value={r.income.capitalGains.longToLong} />
+            <LedgerRow label="STCL used against STCG" value={r.income.capitalGains.shortToShort} />
+            <LedgerRow label="STCL used against LTCG" value={r.income.capitalGains.shortToLong} />
+            <p className="note">
+              Unabsorbed STCL {money(r.income.capitalGains.remainingShortLoss)}; LTCL{' '}
+              {money(r.income.capitalGains.remainingLongLoss)}. These do not reduce other income.
+              Carry-forward eligibility is not determined.
+            </p>
+          </div>
+        )}
         <LedgerRow label="Other sources, after family-pension deduction" value={r.income.other} />
         <LedgerRow
           label="Family-pension deduction included above"

@@ -6,6 +6,8 @@ import {
   type PortFinExport,
   portFinReviewIssues,
   portFinReviewRecords,
+  portFinReport,
+  resolveGrandfathering,
 } from '../src/integrations/portfin';
 import { emptyInput } from '../src/tax-engine/types';
 import { calculateFinalTax } from '../src/tax-engine/calculateFinalTax';
@@ -169,29 +171,30 @@ describe('PortFin version 1 import', () => {
     expect(result.ok && result.reviewCount).toBe(1);
     expect(result.ok && calculateFinalTax(result.input).ok).toBe(false);
   });
-  it('retains loss details for review, never nets losses or imports their absolute value', () => {
+  it('imports signed current-year equity losses and sets them off only within capital gains', () => {
     const d = sample();
     d.gains[1].gain = -500;
     d.gains[1].saleProceeds = 1000;
     const result = importPortFinTaxData(reconcile(d), emptyInput());
     expect(result.ok && result.data.gains[1].gain).toBe(-500);
-    expect(result.ok && result.input.gains.map((g) => g.amount)).toEqual([1000]);
-    expect(result.ok && result.input.unsupported.losses).toBe(true);
-    expect(result.ok && calculateFinalTax(result.input).ok).toBe(false);
+    expect(result.ok && result.input.gains.map((g) => g.amount)).toEqual([1000, -500]);
+    expect(result.ok && result.input.unsupported.losses).toBe(false);
+    expect(result.ok && result.reviewRequired).toBe(false);
+    expect(result.ok && calculateFinalTax(result.input).ok).toBe(true);
   });
-  it('explains a 63-lot mixed export and retains all 31 excluded loss lots for review', () => {
+  it('imports all 63 verified equity lots including 31 losses without dropping any rows', () => {
     const d = sample();
     const positive = {
       ...d.gains[0],
-      kind: '112' as const,
-      asset: 'other' as const,
+      kind: '112A' as const,
+      asset: 'equity' as const,
       gain: 100,
       saleProceeds: 1100,
     };
     const negative = {
       ...d.gains[1],
-      kind: 'otherSTCG' as const,
-      asset: 'other' as const,
+      kind: '111A' as const,
+      asset: 'equity' as const,
       gain: -50,
       saleProceeds: 1450,
     };
@@ -202,24 +205,52 @@ describe('PortFin version 1 import', () => {
     }));
     const result = importPortFinTaxData(reconcile(d), emptyInput());
     if (!result.ok) throw new Error(JSON.stringify(result.errors));
-    expect(result.importedCount).toBe(32);
-    expect(result.reviewCount).toBe(31);
-    expect(result.reviewRequired).toBe(true);
-    expect(portFinReviewIssues(result)).toEqual([
-      {
-        path: 'PortFin capital losses',
-        message: expect.stringContaining('31 loss lots totalling ₹1,550.00'),
-      },
-    ]);
-    expect(portFinReviewIssues(result)[0].message).toContain('Only 32');
-    expect(portFinReviewRecords(result)).toHaveLength(31);
-    expect(portFinReviewRecords(result).every(({ gain }) => gain.gain === -50)).toBe(true);
-    // Confirming the visible positive rows must not clear review of excluded losses.
-    result.input.gains.forEach((gain) => {
-      gain.confirmed = true;
+    expect(result.importedCount).toBe(63);
+    expect(result.reviewCount).toBe(0);
+    expect(result.reviewRequired).toBe(false);
+    expect(portFinReviewIssues(result)).toEqual([]);
+    expect(portFinReviewRecords(result)).toHaveLength(0);
+    expect(result.input.gains.filter((g) => g.amount < 0)).toHaveLength(31);
+    const calculation = calculateFinalTax(result.input);
+    if (!calculation.ok) throw new Error(JSON.stringify(calculation.issues));
+    expect(calculation.result.income.capitalGains.shortToLong).toBe(1550);
+    expect(calculation.result.income.specialGains).toBe(1650);
+  });
+  it('reconciles older lots in reporting without inventing their verified tax cost', () => {
+    const d = sample();
+    Object.assign(d.gains[0], {
+      kind: 'review',
+      asset: 'other',
+      confirmed: false,
+      acquired: '2017-04-01',
+      holdingDays: 3378,
+      reason: 'Grandfathering requires a separately verified cost basis.',
     });
-    expect(portFinReviewIssues(result)).toHaveLength(1);
-    expect(calculateFinalTax(result.input).ok).toBe(false);
+    const result = importPortFinTaxData(reconcile(d), emptyInput());
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    expect(result.reviewRequired).toBe(true);
+    expect(portFinReport(result.data).find((row) => row.term === 'long')?.net).toBe(1000);
+    expect(result.input.gains).toHaveLength(1);
+    expect(() => resolveGrandfathering(d, 'SYNTH', 150, '', true)).toThrow('source');
+    expect(() => resolveGrandfathering(d, 'SYNTH', 150, 'Synthetic FMV statement', false)).toThrow(
+      'confirm',
+    );
+    const resolved = resolveGrandfathering(d, 'SYNTH', 150, 'Synthetic FMV statement', true);
+    const imported = importPortFinTaxData(resolved, emptyInput());
+    if (!imported.ok) throw new Error(JSON.stringify(imported.errors));
+    expect(imported.reviewRequired).toBe(false);
+    expect(imported.input.gains[0].amount).toBe(500);
+    expect(imported.input.gains[0].grandfathering?.originalCost).toBe(1000);
+    expect(
+      calculateFinalTax({ ...imported.input, salary: { ...imported.input.salary, basic: 1500000 } })
+        .ok,
+    ).toBe(true);
+    expect(d.gains[0].costBasis).toBe(1000);
+    expect(d.gains[0].kind).toBe('review');
+    imported.input.gains[0].amount++;
+    expect(calculateFinalTax(imported.input).ok).toBe(false);
+    resolved.gains[0].grandfathering!.fairMarketValue = 1;
+    expect(importPortFinTaxData(resolved, emptyInput()).ok).toBe(false);
   });
   it('distinguishes source warnings and lot classifications from unsupported loss set-off', () => {
     const d = sample();
@@ -239,6 +270,67 @@ describe('PortFin version 1 import', () => {
     if (!complete.ok) throw new Error('fixture');
     expect(portFinReviewIssues(complete)).toEqual([]);
     expect(portFinReviewRecords(complete)).toEqual([]);
+  });
+  it('keeps unrelated review blockers and source flags after verifying one instrument', () => {
+    const d = sample();
+    d.gains.forEach((g, i) =>
+      Object.assign(g, {
+        kind: 'review',
+        asset: 'other',
+        confirmed: false,
+        acquired: '2017-04-01',
+        holdingDays: 3378,
+        reason: 'Grandfathering requires a separately verified cost basis.',
+        instrument: { ...g.instrument, symbol: `SYNTH${i}` },
+      }),
+    );
+    d.warnings = ['Synthetic incomplete-source warning'];
+    const data = reconcile(d);
+    const partial = resolveGrandfathering(data, 'SYNTH0', 150, 'Synthetic AMC statement', true);
+    expect(partial.gains[1]).toEqual(data.gains[1]);
+    const result = importPortFinTaxData(partial, emptyInput());
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    expect(result.reviewRequired).toBe(true);
+    expect(result.reviewCount).toBe(1);
+    expect(portFinReviewIssues(result).map((i) => i.path)).toEqual([
+      'PortFin source warning',
+      'PortFin lot review',
+    ]);
+    expect(calculateFinalTax(result.input).ok).toBe(false);
+  });
+  it('rounds verified lot FMV to paise with decimal half-up and detects repeat verified imports', () => {
+    const d = sample();
+    d.gains = [
+      {
+        ...d.gains[0],
+        kind: 'review',
+        asset: 'other',
+        confirmed: false,
+        acquired: '2017-04-01',
+        holdingDays: 3378,
+        quantity: 1,
+        costBasis: 1,
+        saleProceeds: 2,
+        gain: 1,
+        reason: 'Grandfathering requires a separately verified cost basis.',
+      },
+    ];
+    const resolved = resolveGrandfathering(
+      reconcile(d),
+      'SYNTH',
+      1.005,
+      'Synthetic NAV reference',
+      true,
+    );
+    expect(resolved.gains[0].grandfathering?.fairMarketValue).toBe(1.01);
+    expect(resolved.gains[0].gain).toBe(0.99);
+    const first = importPortFinTaxData(resolved, emptyInput());
+    if (!first.ok) throw new Error(JSON.stringify(first.errors));
+    const repeated = importPortFinTaxData(resolved, first.input, {
+      previousFingerprint: first.fingerprint,
+    });
+    expect(repeated.ok && repeated.duplicate).toBe(true);
+    expect(repeated.ok && repeated.input.gains).toHaveLength(1);
   });
   it('blocks positive partial estimates when report completeness warnings exist', () => {
     const d = sample();

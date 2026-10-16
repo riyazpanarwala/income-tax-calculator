@@ -1,17 +1,232 @@
 import { useRef, useState } from 'react';
-import type { TaxInput } from '../tax-engine/types';
+import type { TaxInput, Gain } from '../tax-engine/types';
 import {
   importPortFinTaxData,
   parsePortFinJson,
   portFinReviewIssues,
   portFinReviewRecords,
+  portFinReport,
+  needsGrandfathering,
+  resolveGrandfathering,
+  type PortFinExport,
   type ImportResult,
 } from './portfin';
 import { money } from '../format';
+import { calculateCapitalGains } from '../tax-engine/calculateCapitalGains';
 
 export interface PortFinSession {
   previous?: TaxInput;
   accepted?: Extract<ImportResult, { ok: true }>;
+  original?: PortFinExport;
+}
+
+function PortFinTotals({
+  result,
+  original,
+  currentGains,
+}: {
+  result: Extract<ImportResult, { ok: true }>;
+  original?: PortFinExport;
+  currentGains?: Gain[];
+}) {
+  const setOff = calculateCapitalGains(currentGains ?? result.input.gains);
+  const report = original ?? result.data;
+  return (
+    <section aria-label="PortFin capital gains reconciliation">
+      <h3>Complete LTCG / STCG breakdown</h3>
+      <div className="table-scroll">
+        <table>
+          <caption>
+            Original PortFin report: all lots, including amounts awaiting cost verification
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Term</th>
+              <th scope="col">Gross gains</th>
+              <th scope="col">Losses</th>
+              <th scope="col">Net gain / loss</th>
+            </tr>
+          </thead>
+          <tbody>
+            {portFinReport(report).map((row) => (
+              <tr key={row.term}>
+                <td>
+                  {row.term === 'short' ? 'STCG' : row.term === 'long' ? 'LTCG' : 'Unclassified'}
+                </td>
+                <td>{money(row.gain)}</td>
+                <td>{money(-row.loss)}</td>
+                <td>{money(row.net)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row" colSpan={3}>
+                Total signed gain / loss
+              </th>
+              <td>{money(report.reconciliation.totalGain)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="note">
+        These are reconciliation totals before annual exemption. Pending grandfathering lots remain
+        in LTCG for reporting; they cannot enter the tax calculation until their acquisition cost is
+        verified.
+      </p>
+      {result.data.gains.some((g) => g.grandfathering) && (
+        <>
+          <p>
+            After verified grandfathering cost adjustments, total signed gain / loss is{' '}
+            {money(result.data.reconciliation.totalGain)}. This can differ from the original report
+            above.
+          </p>
+          <details>
+            <summary>Verified grandfathering cost inputs</summary>
+            <div className="table-scroll">
+              <table>
+                <caption>Verified tax-cost computation for older lots</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Instrument</th>
+                    <th scope="col">Original cost</th>
+                    <th scope="col">FMV (lot total)</th>
+                    <th scope="col">Adjusted cost</th>
+                    <th scope="col">Gain / loss</th>
+                    <th scope="col">FMV source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.data.gains
+                    .filter((g) => g.grandfathering)
+                    .map((g) => (
+                      <tr key={g.id}>
+                        <td>
+                          {g.instrument.symbol} · {g.acquired}
+                        </td>
+                        <td>{money(g.grandfathering!.originalCost)}</td>
+                        <td>{money(g.grandfathering!.fairMarketValue)}</td>
+                        <td>{money(g.costBasis)}</td>
+                        <td>{money(g.gain)}</td>
+                        <td className="portfin-review-reason">{g.grandfathering!.source}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            <p>Re-upload the original export to change verified FMV assumptions.</p>
+          </details>
+        </>
+      )}
+      {!result.reviewRequired && (
+        <>
+          <p>
+            Current-year equity set-off: LTCL against LTCG {money(setOff.longToLong)}; STCL against
+            STCG {money(setOff.shortToShort)}; remaining STCL against LTCG{' '}
+            {money(setOff.shortToLong)}.
+          </p>
+          <p>
+            Unabsorbed STCL {money(setOff.remainingShortLoss)}; unabsorbed LTCL{' '}
+            {money(setOff.remainingLongLoss)}. No salary or other income is reduced. Carry-forward
+            eligibility is not calculated.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function GrandfatheringForm({
+  data,
+  onResolve,
+}: {
+  data: PortFinExport;
+  onResolve: (data: PortFinExport) => void;
+}) {
+  const symbols = [
+    ...new Set(data.gains.filter(needsGrandfathering).map((g) => g.instrument.symbol)),
+  ];
+  const [values, setValues] = useState<
+    Record<string, { fmv: string; source: string; eligible: boolean }>
+  >({});
+  const [error, setError] = useState('');
+  if (!symbols.length) return null;
+  return (
+    <section aria-label="Verify grandfathering costs" className="repeat-card">
+      <h3>Verify older equity / fund acquisition costs</h3>
+      <p>
+        For each instrument, enter the verified fair-market value per unit on 31 January 2018, using
+        the same unit basis as the exported quantities. The app uses the higher of original cost and
+        the lower of FMV and sale proceeds, then deducts transfer expenses. Use records adjusted for
+        any splits or other corporate actions.
+      </p>
+      {symbols.map((symbol) => {
+        const value = values[symbol] ?? { fmv: '', source: '', eligible: false };
+        const update = (patch: Partial<typeof value>) =>
+          setValues((prev) => ({ ...prev, [symbol]: { ...value, ...patch } }));
+        const lots = data.gains.filter(
+          (g) => g.instrument.symbol === symbol && needsGrandfathering(g),
+        );
+        return (
+          <fieldset key={symbol} className="repeat-card">
+            <legend>
+              {symbol} · {lots.length} lots
+            </legend>
+            <div className="fields">
+              <label className="field">
+                <span>{symbol} FMV per unit on 31 January 2018</span>
+                <input
+                  inputMode="decimal"
+                  value={value.fmv}
+                  onChange={(e) => update({ fmv: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>{symbol} FMV source / statement reference</span>
+                <input
+                  value={value.source}
+                  maxLength={2000}
+                  onChange={(e) => update({ source: e.target.value })}
+                  placeholder="AMC statement or historical NAV reference"
+                />
+              </label>
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={value.eligible}
+                onChange={(e) => update({ eligible: e.target.checked })}
+              />
+              <span>
+                I verified {symbol}'s equity / equity-oriented-fund and STT eligibility, original
+                cost, and the FMV unit basis.
+              </span>
+            </label>
+            <button
+              className="secondary"
+              disabled={!value.fmv.trim() || !value.source.trim() || !value.eligible}
+              onClick={() => {
+                try {
+                  const amount = Number(value.fmv.replaceAll(',', ''));
+                  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value.fmv.replaceAll(',', '')))
+                    throw new Error('Enter a valid FMV per unit.');
+                  onResolve(
+                    resolveGrandfathering(data, symbol, amount, value.source, value.eligible),
+                  );
+                  setError('');
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : 'Could not verify cost.');
+                }
+              }}
+            >
+              Apply verified cost for {symbol}
+            </button>
+          </fieldset>
+        );
+      })}
+      {error && <p role="alert">{error}</p>}
+    </section>
+  );
 }
 
 function PortFinReview({ result }: { result: Extract<ImportResult, { ok: true }> }) {
@@ -84,6 +299,7 @@ export function PortFinImport({
 }) {
   const file = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<unknown>();
+  const [originalData, setOriginalData] = useState<PortFinExport>();
   const [error, setError] = useState('');
   const [pastedJson, setPastedJson] = useState('');
   const { previous, accepted } = session;
@@ -101,7 +317,11 @@ export function PortFinImport({
       return;
     }
     onImport(result);
-    setSession({ previous: previous || structuredClone(input), accepted: result });
+    setSession({
+      previous: previous || structuredClone(input),
+      accepted: result,
+      original: originalData ?? result.data,
+    });
     setData(undefined);
     setError('');
   };
@@ -119,6 +339,7 @@ export function PortFinImport({
           const selected = e.currentTarget.files?.[0];
           e.currentTarget.value = '';
           setData(undefined);
+          setOriginalData(undefined);
           setError('');
           if (!selected) return;
           try {
@@ -145,6 +366,7 @@ export function PortFinImport({
           onClick={() => {
             setError('');
             setData(undefined);
+            setOriginalData(undefined);
             try {
               setData(parsePortFinJson(pastedJson));
             } catch (cause) {
@@ -173,10 +395,7 @@ export function PortFinImport({
       {preview?.ok && (
         <section aria-label="PortFin Import Preview">
           <h3>PortFin Import Preview · FY {preview.data.financialYear}</h3>
-          <p>
-            Gross gains and losses are shown separately. No loss set-off or annual exemption has
-            been applied.
-          </p>
+          <PortFinTotals result={preview} original={originalData} />
           <dl>
             {Object.entries(preview.data.summary).map(([kind, amounts]) => (
               <div key={kind}>
@@ -210,6 +429,13 @@ export function PortFinImport({
             </p>
           )}
           {preview.reviewRequired && <PortFinReview result={preview} />}
+          <GrandfatheringForm
+            data={preview.data}
+            onResolve={(resolved) => {
+              setOriginalData((existing) => existing ?? preview.data);
+              setData(resolved);
+            }}
+          />
           <ul>
             {preview.warnings
               .filter(
@@ -246,6 +472,18 @@ export function PortFinImport({
             PortFin imported · FY {accepted.data.financialYear}. {accepted.importedCount} of{' '}
             {accepted.data.gains.length} lots appear in the editable capital gains below.
           </p>
+          <PortFinTotals result={accepted} original={session.original} currentGains={input.gains} />
+          {accepted.data.gains.some(needsGrandfathering) && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setOriginalData(session.original ?? accepted.data);
+                setData(accepted.data);
+              }}
+            >
+              Review grandfathering costs
+            </button>
+          )}
           {accepted.reviewRequired && (
             <>
               <p>

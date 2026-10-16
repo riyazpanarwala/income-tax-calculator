@@ -30,7 +30,7 @@ The filename should identify the financial year, for example `ITR_2026-27.xlsx`.
 3. Open **Capital gains → Import from PortFin** and select that JSON file.
 4. Review the preview and warnings, then confirm **Import gains** or **Replace capital gains**. Merge is available for the first import only after reviewing existing broker/manual overlap.
 5. Review/edit the accepted gains and continue with salary, other income, TDS and other payments. These unrelated fields are preserved.
-6. Resolve all review items before relying on a result. Losses and ambiguous classifications withhold the estimate; no partial tax figure is presented. Discard can restore pre-import gains.
+6. Resolve all review items before relying on a result. Current-year eligible equity losses are retained and set off within capital gains. The full LTCG/STCG table includes every export lot. For grandfathering-review lots, enter the verified 31 January 2018 FMV per unit, its source, and eligibility/unit-basis confirmation in the preview. Original report totals remain visible separately from adjusted tax-cost totals. Missing cost verification and ambiguous classifications withhold the estimate. Discard can restore pre-import gains.
 
 Repeat imports do not append duplicate gains. Files are processed locally in browser memory. See [contract, mappings and limitations](docs/PORTFIN_INTEGRATION.md). The calculator remains an estimate; verify the final return.
 
@@ -89,4 +89,4 @@ Add another year by implementing `TaxRules` in a separate file and registering i
 
 Adult individuals; salary/regular pension; computed ordinary business income; ordinary other-source income and family pension; property income with restricted set-off; employer NPS; Government Agniveer contributions; classified gains at normal, 20% and 12.5% rates; resident rebate; both marginal reliefs; supported homogeneous surcharge cases; cess; rounding; tax credits and refunds.
 
-**Not a universal tax-return computation.** Particularly, mixed capital-gain/dividend and other income above ₹50 lakh, salary exemption calculations, losses, grandfathering, protected property indexation and treaty cases are blocked. See the rules document for the complete input contract.
+**Not a universal tax-return computation.** Current-year eligible equity loss set-off and grandfathering with verified FMV inputs are supported. Mixed capital-gain/dividend and other income above ₹50 lakh, salary exemptions, business or brought-forward losses, mixed-provision loss allocation, unverified grandfathering costs, protected property indexation and treaty cases remain blocked. See the rules document for the complete input contract.

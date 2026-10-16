@@ -25,11 +25,13 @@ No tax liability, credentials, account IDs or Prisma objects are exported. Money
 | `otherLTCG` | Recognized but unsupported; review, no partial estimate              |
 | `review`    | No invented Gain category; retain external row for review            |
 
-For supported rows, `amount` is the signed FIFO gain only when non-negative; dates, asset and confirmation are retained. No proceeds are substituted for gain. The existing engine's validation is applied before a row is accepted. Ambiguous, unconfirmed, grandfathered and unsupported rows remain in the preview/session and withhold the estimate. Negative rows retain their signed values in the external review data, are not netted or converted into positive gains, and set the existing loss guard.
+For supported rows, `amount` is the signed FIFO gain; dates, asset and confirmation are retained. No proceeds are substituted for gain. Current-year eligible 111A/112A equity losses are imported alongside gains, and the engine applies LTCL against LTCG, then STCL against STCG and remaining LTCG before the annual 112A band. Losses never reduce other income. Residual losses are reported; brought-forward claims and carry-forward eligibility remain outside scope. Negative rows under other provisions and mixed-provision loss allocation require review.
 
 The adapter returns a guarded TaxInput using existing unsupported flags. The UI stores import review separately, preserving the user's own unsupported-circumstance selections; unchecking a checkbox cannot make an incomplete import produce a tax estimate. Replace with reconciled data or discard the import. Discard restores pre-import capital gains, preserving current income/payment fields and user-selected scope flags. Session metadata is held in React memory, survives panel/tab changes, and clears on reset/reload.
 
-When an estimate is withheld, the estimate panel now identifies the actual blocker: loss-lot count and total, source completeness warnings, or individual lot classification issues. **View PortFin import details** opens Capital gains and scrolls to the retained import. Both preview and accepted import show a table of excluded lots with their signed amounts, dates, source categories and reasons. The confirmation button explicitly says **Import for review — estimate withheld** for such files. Editing or confirming the positive rows cannot resolve excluded loss lots. Discard restores the previous gains; it does not calculate the discarded export. Instrument tax classifications are preserved from PortFin, never inferred from NSE/BSE or a stock symbol.
+The complete LTCG/STCG reconciliation includes every source lot, including older lots marked with PortFin's explicit grandfathering review reason. Unrelated review records stay unclassified. These reporting totals are not substituted for verified taxable gains. **Verify older equity / fund acquisition costs** accepts FMV per unit on 31 January 2018, a source reference and explicit eligibility/unit-basis confirmation. Applying it updates only the selected instrument's grandfathering lots, recalculates the bucket summaries and preserves original cost, total FMV, proceeds, expenses and source in an optional `grandfathering` object. The original uploaded report is retained in the in-memory session, separately from adjusted tax amounts. No file is overwritten and no source values are invented. Re-upload the original to change the FMV assumptions.
+
+When an estimate is withheld, the panel identifies remaining source or lot-review issues. **View PortFin import details** opens Capital gains and scrolls to the retained import. Both preview and accepted import show excluded lots with signed amounts, dates, categories and reasons. The confirmation button says **Import for review — estimate withheld** while blockers remain. Discard restores the previous gains; it does not calculate the discarded export. Instrument eligibility is never inferred from NSE/BSE or a stock symbol.
 
 ## Replacement and duplicate policy
 
@@ -47,9 +49,16 @@ The first import can explicitly merge after reviewing broker/manual overlap. Exa
 - Corporate actions modify historical quantity/price in place, without an action ledger. The adapter preserves the resulting FIFO amounts; it cannot independently verify bonus/grandfathering treatment.
 - Current PortFin exports can supply adjusted tax cost and separately itemised transfer expenditure. Older exports do not itemise transfer expenditure. Verify allowable costs before confirming tax eligibility; the importer checks arithmetic, not expense deductibility.
 - Missing purchases, potentially truncated trade loading (1,000 records), and unsupported cases block reliance on an estimate. The UI passes raw trades to the export adapter for sale-quantity reconciliation. Holdings alone cannot reveal completely dropped unmatched sales.
-- Existing set-off, surcharge allocation, grandfathering and other engine scope restrictions remain in force.
+- Current-year equity-only loss set-off and verified grandfathering inputs are supported. Brought-forward losses, mixed-provision loss allocation, protected property indexation and existing surcharge allocation restrictions remain outside scope.
 
 ## Verification
+
+Current-year equity-loss and grandfathering extension, checked 16 October 2026:
+
+- 256 automated tests passed; production build and diff-whitespace checks passed.
+- The supplied updated 63-lot export reconciled to STCG −₹8,515.87, LTCG ₹80,236.12 and combined net ₹71,720.25. All 31 loss lots are accepted; only 16 lots for two older funds await FMV verification. The personal source file is not stored in the repository.
+- Browser checks confirmed those original totals and the two instrument-level FMV forms. A separate synthetic fixture exercised verification, original-versus-adjusted totals, signed negative input population, preserved salary and a resumed tax estimate. No historical NAV or eligibility was invented for the personal file.
+- Tests cover LTCL restrictions, STCL sequencing, pre-exemption set-off, all-loss cases, residual loss reporting, paise arithmetic, unverifiable costs, partial verification, source completeness, tampering and duplicate imports. Existing rebate, surcharge and unsupported-scope regression tests continue to pass.
 
 Automated coverage includes the real cross-repository fixture, empty exports, 111A/112A, other categories, multiple FIFO lots/instruments, FY filtering, adjusted corporate-action lots, losses, schema stability, unchanged PortFin reports, strict nested validation, malformed JSON, duplicate imports, merge overlap, unrelated input preservation and unchanged-engine calculation.
 
