@@ -15,6 +15,14 @@ Open the local URL printed by Vite. `npm.cmd run build` type-checks and builds `
 
 Income stays in React memory and is cleared when the page is refreshed. There is no analytics, storage or outbound income submission. Google Fonts may be fetched for typography; system-font fallbacks keep the app usable without them. Print creates a local calculation breakdown.
 
+## Import salary, dividends and bank interest from Excel
+
+Choose **Upload income Excel** above Taxpayer details, select your ITR `.xlsx` or `.xls`, review the preview, and choose **Fill income fields**. This supports the supplied monthly salary layout (Basic, HRA, CCA, Tra. All., Med. Allow, Bonus, Qua. All., Tel. All, Sp. All, Special, Arrears, Total, PT, TDS) and the side-by-side company/date/amount and bank/date/amount tables under **Dividends** (or **Dividands**) and **Interest**. Sheet positions and names may vary; keep the column labels and table structure.
+
+The importer sums monthly components rather than using net pay or cached summary totals. HRA and the other allowances fill taxable allowances; arrears fill other taxable salary. Salary components and dividends replace the current entries. Choose savings, fixed deposits or other taxable interest; only that interest category is replaced. The optional TDS checkbox replaces **total TDS** with salary TDS, so add TDS from other sources separately. Employer contributions, business income, capital gains and other payments are preserved. Repeating the import with the same interest category replaces values without doubling them. For a mix of savings and deposit interest, split the amounts in the populated fields after importing.
+
+The filename should identify the financial year, for example `ITR_2026-27.xlsx`. A different filename year is rejected. Conflicting salary-tab years, out-of-year transaction dates, incomplete salary months and blank transaction amounts are shown for review; confirm the year and amounts before applying them. Blank transaction amounts are excluded, and no missing months are projected. Detail formulas use Excel's saved results: recalculate and save before uploading. Summary formulas are excluded. Files stay in browser memory, and the original workbook is never changed or uploaded.
+
 ## Import Capital Gains from PortFin
 
 1. Select the correct FY. This calculator currently supports **FY 2026-27 only**; FY 2025-26 exports are rejected.

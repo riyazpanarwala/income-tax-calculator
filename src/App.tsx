@@ -8,6 +8,7 @@ import { parseBrokerFile, KNOWN_BROKERS } from './brokerParser';
 import { PortFinImport, type PortFinSession } from './integrations/PortFinImport';
 import { ShoonyaFnoImport, type FnoSession } from './integrations/ShoonyaFnoImport';
 import type { ShoonyaFnoStatement } from './integrations/shoonyaFno';
+import { IncomeWorkbookImport } from './integrations/IncomeWorkbookImport';
 
 export interface BrokerItem {
   id: string;
@@ -597,6 +598,14 @@ export default function App() {
                         <span>All amounts are annual, in INR.</span>
                       </div>
                     )}
+                    <IncomeWorkbookImport
+                      input={input}
+                      onImport={(next) => {
+                        setInput(next);
+                        setSample(false);
+                        setShowSalaryHelper(false);
+                      }}
+                    />
                     <Panel
                       id="profile"
                       num="01"
