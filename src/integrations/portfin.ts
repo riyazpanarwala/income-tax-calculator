@@ -106,6 +106,7 @@ export function resolveGrandfathering(
   fmvPerUnit: number,
   source: string,
   eligible: boolean,
+  isin?: string,
 ): PortFinExport {
   if (
     !eligible ||
@@ -120,7 +121,12 @@ export function resolveGrandfathering(
     );
   const next = structuredClone(data);
   const matches = next.gains.filter(
-    (g) => g.instrument.symbol === symbol && needsGrandfathering(g),
+    (g) =>
+      g.instrument.symbol === symbol &&
+      needsGrandfathering(g) &&
+      (!isin ||
+        (g.instrument.isin.trim().toUpperCase() === isin &&
+          g.instrument.exchange.trim().toUpperCase() === 'AMFI')),
   );
   if (!matches.length) throw new Error('No grandfathering review lots found for this instrument.');
   for (const g of matches) {

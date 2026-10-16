@@ -1,0 +1,2 @@
+# Keep the official historical reference byte-for-byte and omit generated data diffs.
+public/data/amfi-nav-2018-01-31.txt -text -diff

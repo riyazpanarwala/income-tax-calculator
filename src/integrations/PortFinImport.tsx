@@ -13,11 +13,37 @@ import {
 } from './portfin';
 import { money } from '../format';
 import { calculateCapitalGains } from '../tax-engine/calculateCapitalGains';
+import { applyAmfiNav, loadAmfiNav, AMFI_2018_SOURCE, type AutomaticNav } from './amfiNav';
 
 export interface PortFinSession {
   previous?: TaxInput;
   accepted?: Extract<ImportResult, { ok: true }>;
   original?: PortFinExport;
+  automaticNavs?: AutomaticNav[];
+}
+
+function AutomaticNavNotice({ entries }: { entries: AutomaticNav[] }) {
+  if (!entries.length) return null;
+  return (
+    <section aria-label="Automatic historical NAV lookup">
+      <p>
+        31 January 2018 NAVs matched automatically from{' '}
+        <a href={AMFI_2018_SOURCE} target="_blank" rel="noreferrer">
+          AMFI's official reference
+        </a>
+        . Grandfathering costs have been calculated.
+      </p>
+      <ul>
+        {entries.map((entry) => (
+          <li key={`${entry.symbol}:${entry.isin}`}>
+            {entry.symbol}: NAV per unit ₹
+            {entry.nav.toLocaleString('en-IN', { maximumFractionDigits: 10 })} · {entry.isin} ·{' '}
+            {entry.lots} lots
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function PortFinTotals({
@@ -36,9 +62,7 @@ function PortFinTotals({
       <h3>Complete LTCG / STCG breakdown</h3>
       <div className="table-scroll">
         <table>
-          <caption>
-            Original PortFin report: all lots, including amounts awaiting cost verification
-          </caption>
+          <caption>Original PortFin report: all lots, before tax-cost adjustments</caption>
           <thead>
             <tr>
               <th scope="col">Term</th>
@@ -70,9 +94,10 @@ function PortFinTotals({
         </table>
       </div>
       <p className="note">
-        These are reconciliation totals before annual exemption. Pending grandfathering lots remain
-        in LTCG for reporting; they cannot enter the tax calculation until their acquisition cost is
-        verified.
+        These are reconciliation totals before annual exemption.{' '}
+        {result.data.gains.some(needsGrandfathering)
+          ? 'Pending grandfathering lots remain in LTCG for reporting; they cannot enter the tax calculation until their acquisition cost is verified.'
+          : 'Tax-cost adjustments and current-year loss set-off are shown separately below.'}
       </p>
       {result.data.gains.some((g) => g.grandfathering) && (
         <>
@@ -154,6 +179,9 @@ function GrandfatheringForm({
   return (
     <section aria-label="Verify grandfathering costs" className="repeat-card">
       <h3>Verify older equity / fund acquisition costs</h3>
+      <p>
+        Automatic lookup could not resolve these lots. Enter verified values below if available.
+      </p>
       <p>
         For each instrument, enter the verified fair-market value per unit on 31 January 2018, using
         the same unit basis as the exported quantities. The app uses the higher of original cost and
@@ -302,11 +330,36 @@ export function PortFinImport({
   const [originalData, setOriginalData] = useState<PortFinExport>();
   const [error, setError] = useState('');
   const [pastedJson, setPastedJson] = useState('');
+  const [reading, setReading] = useState(false);
+  const [automaticNavs, setAutomaticNavs] = useState<AutomaticNav[]>([]);
+  const [automaticError, setAutomaticError] = useState('');
   const { previous, accepted } = session;
   const preview =
     data === undefined
       ? undefined
       : importPortFinTaxData(data, input, { previousFingerprint: accepted?.fingerprint });
+  const preparePreview = async (raw: unknown) => {
+    setData(undefined);
+    setOriginalData(undefined);
+    setAutomaticNavs([]);
+    setAutomaticError('');
+    const parsed = importPortFinTaxData(raw, input);
+    if (!parsed.ok || !parsed.data.gains.some(needsGrandfathering)) {
+      setData(raw);
+      return;
+    }
+    setOriginalData(parsed.data);
+    try {
+      const resolved = applyAmfiNav(parsed.data, await loadAmfiNav());
+      setAutomaticNavs(resolved.applied);
+      setData(resolved.data);
+    } catch {
+      setAutomaticError(
+        'Automatic historical NAV lookup is unavailable. Retry or use the manual cost fields below.',
+      );
+      setData(parsed.data);
+    }
+  };
   const accept = (mode: 'replace' | 'merge') => {
     const result = importPortFinTaxData(data, input, {
       mode,
@@ -321,14 +374,15 @@ export function PortFinImport({
       previous: previous || structuredClone(input),
       accepted: result,
       original: originalData ?? result.data,
+      automaticNavs,
     });
     setData(undefined);
     setError('');
   };
   return (
     <div id="portfin-import" className="repeat-card">
-      <button className="secondary" onClick={() => file.current?.click()}>
-        Import from PortFin
+      <button className="secondary" disabled={reading} onClick={() => file.current?.click()}>
+        {reading ? 'Reading export and matching historical NAVs…' : 'Import from PortFin'}
       </button>
       <input
         ref={file}
@@ -342,11 +396,14 @@ export function PortFinImport({
           setOriginalData(undefined);
           setError('');
           if (!selected) return;
+          setReading(true);
           try {
             if (selected.size > 5_000_000) throw new Error('PortFin file exceeds the 5 MB limit.');
-            setData(parsePortFinJson(await selected.text()));
+            await preparePreview(parsePortFinJson(await selected.text()));
           } catch (cause) {
             setError(cause instanceof Error ? cause.message : 'Could not read the file.');
+          } finally {
+            setReading(false);
           }
         }}
       />
@@ -363,14 +420,18 @@ export function PortFinImport({
         </label>
         <button
           className="secondary"
-          onClick={() => {
+          disabled={reading}
+          onClick={async () => {
             setError('');
             setData(undefined);
             setOriginalData(undefined);
+            setReading(true);
             try {
-              setData(parsePortFinJson(pastedJson));
+              await preparePreview(parsePortFinJson(pastedJson));
             } catch (cause) {
               setError(cause instanceof Error ? cause.message : 'Could not read JSON.');
+            } finally {
+              setReading(false);
             }
           }}
         >
@@ -378,6 +439,26 @@ export function PortFinImport({
         </button>
       </details>
       {error && <p role="alert">{error}</p>}
+      {automaticError && (
+        <p role="status">
+          {automaticError}{' '}
+          <button
+            className="text-button"
+            disabled={reading}
+            onClick={async () => {
+              if (!originalData) return;
+              setReading(true);
+              try {
+                await preparePreview(originalData);
+              } finally {
+                setReading(false);
+              }
+            }}
+          >
+            Retry automatic lookup
+          </button>
+        </p>
+      )}
       {preview && !preview.ok && (
         <div role="alert">
           <ul>
@@ -395,6 +476,7 @@ export function PortFinImport({
       {preview?.ok && (
         <section aria-label="PortFin Import Preview">
           <h3>PortFin Import Preview · FY {preview.data.financialYear}</h3>
+          <AutomaticNavNotice entries={automaticNavs} />
           <PortFinTotals result={preview} original={originalData} />
           <dl>
             {Object.entries(preview.data.summary).map(([kind, amounts]) => (
@@ -473,12 +555,18 @@ export function PortFinImport({
             {accepted.data.gains.length} lots appear in the editable capital gains below.
           </p>
           <PortFinTotals result={accepted} original={session.original} currentGains={input.gains} />
+          <AutomaticNavNotice entries={session.automaticNavs ?? []} />
           {accepted.data.gains.some(needsGrandfathering) && (
             <button
               className="secondary"
-              onClick={() => {
-                setOriginalData(session.original ?? accepted.data);
-                setData(accepted.data);
+              disabled={reading}
+              onClick={async () => {
+                setReading(true);
+                try {
+                  await preparePreview(session.original ?? accepted.data);
+                } finally {
+                  setReading(false);
+                }
               }}
             >
               Review grandfathering costs
